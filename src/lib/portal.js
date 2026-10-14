@@ -19,12 +19,12 @@ export class RestError extends Error {
 
 const TIMEOUT_MS = 20000;
 
-async function getSessid() {
-  return (await chrome.storage.session.get('sessid')).sessid || '';
-}
+// Each portal has its own sessid, kept in storage.session under "sessid:<origin>".
+export const sessidKey = (origin) => `sessid:${origin}`;
 
 export async function callRest(origin, method, params = {}) {
-  let sessid = await getSessid();
+  const key = sessidKey(origin);
+  let sessid = (await chrome.storage.session.get(key))[key] || '';
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await fetch(`${origin}/rest/${method}.json?sessid=${encodeURIComponent(sessid || '-')}`, {
       method: 'POST',
@@ -43,7 +43,7 @@ export async function callRest(origin, method, params = {}) {
     }
     if (data.error === 'session_failed' && data.sessid && data.sessid !== sessid) {
       sessid = data.sessid;
-      await chrome.storage.session.set({ sessid });
+      await chrome.storage.session.set({ [key]: sessid });
       continue;
     }
     if (data.error) {

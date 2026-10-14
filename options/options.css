@@ -4,20 +4,54 @@ h2 { font-size: 15px; margin: 0 0 10px; }
 section { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
 label { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; }
 label input { margin-top: 3px; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; }
-#portal {
-  flex: 1 1 260px;
-  min-width: 0;
-  font: inherit;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--fg);
-}
 .small { font-size: 12.5px; }
-.status { display: flex; gap: 8px; align-items: center; margin-bottom: 0; }
 #portal-msg:empty { display: none; }
 #portal-msg.error { color: var(--danger); }
 .welcome { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .welcome p { margin: 0; }
+
+/* Portal list: one box; every row (portals and the "add" row) shares a two-column
+   subgrid, so all action buttons sit in one column with identical geometry. */
+.portal-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+#portals { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; list-style: none; margin: 0; padding: 0; }
+.portal-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+.add-row { border-bottom: 0; background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.action { width: 100%; height: 36px; padding: 0 16px; white-space: nowrap; }
+.remove:hover { filter: none; color: var(--danger); border-color: var(--danger); }
+.portal-info { min-width: 0; }
+.portal-name { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.portal-name .host { overflow-wrap: anywhere; }
+.portal-row .state { padding-left: 16px; }
+#portal {
+  width: 100%;
+  height: 36px;
+  min-width: 0;
+  font: inherit;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+}
+.portal-list + p { margin-top: 10px; }
+/* Narrow: content gets the full row, the button drops into the shared column below. */
+@media (max-width: 480px) {
+  .portal-info,
+  .add-row #portal { grid-column: 1 / -1; }
+  .portal-row .action { grid-column: 2; }
+}

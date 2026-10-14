@@ -1,64 +1,182 @@
 {
-  "extName": { "message": "Bitrix24 Notifications" },
-  "extDescription": { "message": "Desktop notifications for Bitrix24 messages, notifications and calls, even when no portal tab is open." },
-
-  "statusUnconfigured": { "message": "not set up" },
-  "statusLogin": { "message": "log in to Bitrix24" },
-  "statusError": { "message": "connection problem" },
-  "statusOnline": { "message": "real-time" },
-  "statusPolling": { "message": "checking every minute" },
-  "statusMuted": { "message": "muted" },
-  "unreadCount": { "message": "$1 unread" },
-
-  "file": { "message": "[File]" },
-  "incomingCall": { "message": "Incoming call" },
-  "incomingVideoCall": { "message": "Incoming video call" },
-  "missedCall": { "message": "Missed call" },
-  "systemTitle": { "message": "Bitrix24" },
-  "newMessage": { "message": "New message" },
-  "newNotification": { "message": "New notification" },
-  "markRead": { "message": "Mark as read" },
-  "answer": { "message": "Answer" },
-  "summaryTitle": { "message": "Unread in Bitrix24" },
-  "summaryChats": { "message": "Chats with new messages: $1" },
-  "summaryNotifications": { "message": "New notifications: $1" },
-  "testTitle": { "message": "Bitrix24 Notifications" },
-  "testBody": { "message": "Notifications are working." },
-
-  "popupStateOnline": { "message": "Connected, real-time" },
-  "popupStatePolling": { "message": "Connected, checking every minute" },
-  "popupStateLogin": { "message": "You are not logged in to the portal" },
-  "popupStateUnconfigured": { "message": "Choose your Bitrix24 portal to get started" },
-  "popupStatePermission": { "message": "Access to the portal has not been granted" },
-  "popupStateError": { "message": "Cannot reach the portal" },
-  "popupUnread": { "message": "Unread" },
-  "popupOpen": { "message": "Open Bitrix24" },
-  "popupLogin": { "message": "Log in" },
-  "popupSetup": { "message": "Set up" },
-  "popupMute": { "message": "Mute for 1 hour" },
-  "popupUnmute": { "message": "Unmute" },
-  "popupMutedUntil": { "message": "Muted until $1" },
-  "popupSettings": { "message": "Settings" },
-
-  "optTitle": { "message": "Bitrix24 Notifications — Settings" },
-  "optWelcomeTitle": { "message": "Welcome!" },
-  "optWelcome": { "message": "Enter the address of your Bitrix24 below to start receiving notifications." },
-  "optPortal": { "message": "Portal" },
-  "optPortalHint": { "message": "Address of your Bitrix24, e.g. https://yourcompany.bitrix24.ru. Log in there in this browser as usual; the extension uses that login." },
-  "optSave": { "message": "Save" },
-  "optSaved": { "message": "Saved." },
-  "optInvalidUrl": { "message": "This does not look like a portal address." },
-  "optPermissionDenied": { "message": "Access to the portal was not granted, so the extension cannot work." },
-  "optNotify": { "message": "Notify me about" },
-  "optPrivate": { "message": "Private messages" },
-  "optGroup": { "message": "Group chat messages" },
-  "optSystem": { "message": "Notifications (tasks, mentions, comments, …)" },
-  "optCalls": { "message": "Incoming calls" },
-  "optMissedCalls": { "message": "Missed calls" },
-  "optBehaviour": { "message": "Behaviour" },
-  "optShowText": { "message": "Show message text (turn off for privacy)" },
-  "optSuppress": { "message": "Don't notify while a portal tab is active and focused" },
-  "optSilent": { "message": "Silent notifications" },
-  "optTest": { "message": "Send a test notification" },
-  "optTip": { "message": "Tip: if the portal page itself is allowed to show notifications, you may get duplicates while it is open. You can block notifications for the portal site in the browser's site settings." }
+  "extName": {
+    "message": "Bitrix24 Notifications"
+  },
+  "extDescription": {
+    "message": "Desktop notifications for Bitrix24 messages, notifications and calls, even when no portal tab is open."
+  },
+  "statusUnconfigured": {
+    "message": "not set up"
+  },
+  "statusLogin": {
+    "message": "log in to Bitrix24"
+  },
+  "statusError": {
+    "message": "connection problem"
+  },
+  "statusOnline": {
+    "message": "real-time"
+  },
+  "statusPolling": {
+    "message": "checking every minute"
+  },
+  "statusMuted": {
+    "message": "muted"
+  },
+  "unreadCount": {
+    "message": "$1 unread"
+  },
+  "file": {
+    "message": "[File]"
+  },
+  "incomingCall": {
+    "message": "Incoming call"
+  },
+  "incomingVideoCall": {
+    "message": "Incoming video call"
+  },
+  "missedCall": {
+    "message": "Missed call"
+  },
+  "systemTitle": {
+    "message": "Bitrix24"
+  },
+  "newMessage": {
+    "message": "New message"
+  },
+  "newNotification": {
+    "message": "New notification"
+  },
+  "markRead": {
+    "message": "Mark as read"
+  },
+  "answer": {
+    "message": "Answer"
+  },
+  "summaryTitle": {
+    "message": "Unread in Bitrix24"
+  },
+  "summaryChats": {
+    "message": "Chats with new messages: $1"
+  },
+  "summaryNotifications": {
+    "message": "New notifications: $1"
+  },
+  "testTitle": {
+    "message": "Bitrix24 Notifications"
+  },
+  "testBody": {
+    "message": "Notifications are working."
+  },
+  "popupStateOnline": {
+    "message": "Connected, real-time"
+  },
+  "popupStatePolling": {
+    "message": "Connected, checking every minute"
+  },
+  "popupStateLogin": {
+    "message": "You are not logged in to the portal"
+  },
+  "popupStateUnconfigured": {
+    "message": "Choose your Bitrix24 portal to get started"
+  },
+  "popupStatePermission": {
+    "message": "Access to the portal has not been granted"
+  },
+  "popupStateError": {
+    "message": "Cannot reach the portal"
+  },
+  "popupLogin": {
+    "message": "Log in"
+  },
+  "popupSetup": {
+    "message": "Set up"
+  },
+  "popupMute": {
+    "message": "Mute for 1 hour"
+  },
+  "popupUnmute": {
+    "message": "Unmute"
+  },
+  "popupMutedUntil": {
+    "message": "Muted until $1"
+  },
+  "popupSettings": {
+    "message": "Settings"
+  },
+  "optTitle": {
+    "message": "Bitrix24 Notifications — Settings"
+  },
+  "optPortalHint": {
+    "message": "Address of a Bitrix24, e.g. https://yourcompany.bitrix24.ru. Log in there in this browser as usual; the extension uses that login."
+  },
+  "optSaved": {
+    "message": "Saved."
+  },
+  "optInvalidUrl": {
+    "message": "This does not look like a portal address."
+  },
+  "optPermissionDenied": {
+    "message": "Access to the portal was not granted, so the extension cannot work."
+  },
+  "optNotify": {
+    "message": "Notify me about"
+  },
+  "optPrivate": {
+    "message": "Private messages"
+  },
+  "optGroup": {
+    "message": "Group chat messages"
+  },
+  "optSystem": {
+    "message": "Notifications (tasks, mentions, comments, …)"
+  },
+  "optCalls": {
+    "message": "Incoming calls"
+  },
+  "optMissedCalls": {
+    "message": "Missed calls"
+  },
+  "optBehaviour": {
+    "message": "Behaviour"
+  },
+  "optShowText": {
+    "message": "Show message text (turn off for privacy)"
+  },
+  "optSuppress": {
+    "message": "Don't notify while a portal tab is active and focused"
+  },
+  "optSilent": {
+    "message": "Silent notifications"
+  },
+  "optTest": {
+    "message": "Send a test notification"
+  },
+  "optTip": {
+    "message": "Tip: if the portal page itself is allowed to show notifications, you may get duplicates while it is open. You can block notifications for the portal site in the browser's site settings."
+  },
+  "popupStateConnecting": {
+    "message": "Connecting…"
+  },
+  "optPortals": {
+    "message": "Portals"
+  },
+  "optAddPortal": {
+    "message": "Add portal"
+  },
+  "optRemove": {
+    "message": "Remove"
+  },
+  "optWelcomeTitle": {
+    "message": "Welcome!"
+  },
+  "optWelcome": {
+    "message": "Enter the address of your Bitrix24 below to start receiving notifications. You can add several portals."
+  },
+  "optDuplicate": {
+    "message": "This portal is already in the list."
+  },
+  "popupOpenShort": {
+    "message": "Open"
+  }
 }

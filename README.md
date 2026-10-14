@@ -8,7 +8,8 @@ Native desktop notifications for Bitrix24 that work even when no portal tab is o
 - Notifications disappear when you read the message or answer the call somewhere else (portal tab, mobile app, desktop app).
 - The toolbar badge shows the unread count. `!` means you need to log in, `?` means the extension is not set up yet.
 - Clicking a chat notification opens that chat. If a portal tab is already open, it is reused without a reload.
-- Settings: notification types, hiding message text, silent mode, mute for 1 hour, and no notifications while a portal tab is focused. English and Russian UI.
+- **Several portals at once.** Each portal has its own connection and login state. When more than one portal is configured, every notification names its portal. The badge adds up unread counts across portals.
+- Settings: notification types, hiding message text, silent mode, mute for 1 hour, and no notifications while a portal tab is focused. These are shared by all portals. English and Russian UI.
 
 There is no separate login. The extension uses your normal portal session in the same browser, the same way the portal page does.
 
@@ -16,13 +17,13 @@ There is no separate login. The extension uses your normal portal session in the
 
 1. Open `chrome://extensions` and turn on **Developer mode**.
 2. Click **Load unpacked** and select this folder (the one containing `manifest.json`).
-3. The settings page opens automatically after installing. You can also open it later from the extension menu (**Options**). Enter your portal address (e.g. `https://yourcompany.bitrix24.ru`), click **Save**, then allow access to that site when the browser asks.
-4. Log in to the portal in this browser if you have not already. The badge turns into an unread counter, and the popup shows **Connected, real-time**.
+3. The settings page opens automatically after installing. You can also open it later from the extension menu (**Options**). Enter your portal address (e.g. `https://yourcompany.bitrix24.ru`), click **Add portal**, then allow access to that site when the browser asks. Repeat for any other portals.
+4. Log in to each portal in this browser if you have not already. The badge turns into an unread counter, and the popup lists each portal as **Connected, real-time**.
 
 ## How it works
 
 ```
-offscreen/offscreen.js   holds the Push&Pull WebSocket (src/lib/pull.js), relays events
+offscreen/offscreen.js   holds one Push&Pull WebSocket per portal (src/lib/pull.js), relays events
         │ runtime messages
 src/background.js        service worker: session, events → notifications, badge, clicks,
                          1-minute watchdog alarm, REST catch-up polling
@@ -34,6 +35,7 @@ https://<portal>/rest/…  im.user.get, pull.config.get, im.counters.get, im.rec
 - **Real time.** `pull.config.get` returns the Push&Pull server and channels. The offscreen document keeps the WebSocket open in text mode. It handles channel expiry and reconnects with backoff, replaying missed messages by `mid`. The WebSocket can't live in the service worker, because Chromium suspends an idle worker after about 30 s and the pull server sends no keepalive traffic.
 - **Fallback.** The watchdog alarm runs every minute. If the real-time connection is down, it polls `im.recent.list` and `im.notify.get`. It also polls every 5 minutes as a safety net. Each dialog's last-seen message id is stored, so nothing is notified twice. After a long absence, more than 3 pending items are folded into one summary notification. Items older than 12 h are not notified.
 - **Event mapping.** `src/lib/events.js` turns pull commands into notification actions. `docs/protocol.md` documents the payloads this relies on.
+- **Per-portal state.** Session storage keeps `portal:<origin>` (login, connection, unread count) and `sessid:<origin>`. Local storage keeps `cursor:<origin>` (last-notified ids). Notification ids are `<origin>|<kind>:<id>`. Removing a portal drops all of these.
 
 ### Permissions
 
@@ -44,15 +46,14 @@ https://<portal>/rest/…  im.user.get, pull.config.get, im.counters.get, im.rec
 | `storage` | Settings, and per-dialog "last notified" ids. |
 | `offscreen` | A hidden page that keeps the WebSocket open. |
 | `scripting` | Opens a chat inside an already-open portal tab instead of reloading it. |
-| Access to your portal (requested at setup) | REST calls with your session. Also lets the extension see whether a portal tab is open or focused. |
+| Access to your portals (requested when adding each one) | REST calls with your session. Also lets the extension see whether a portal tab is open or focused. |
 
-The extension has no access to any other site.
+The extension has no access to any other site. Removing a portal also gives up access to it.
 
 ## Limitations
 
 - It relies on the portal's internal web APIs and the Push&Pull protocol, as observed on Bitrix24 cloud in October 2026. These are not public, documented APIs, and Bitrix24 updates could change them. `docs/protocol.md` lists exactly what is used.
 - It has only been tested with Bitrix24 cloud. Self-hosted ("box") installations may use a different pull server version.
-- One portal at a time.
 - Calls cannot be answered from the notification. **Answer** opens the chat, and you answer in the portal.
 
 ## Development

@@ -6,7 +6,9 @@ import { toPlainText, truncate, extractUrl, absoluteUrl } from '../src/lib/forma
 import { interpret } from '../src/lib/events.js';
 import { buildUrl, parseFrame, backoffDelay, configExpiry, PullClient, State } from '../src/lib/pull.js';
 import { recentToActions, notificationsToActions, totalUnread } from '../src/lib/poller.js';
-import { normalizePortalUrl } from '../src/lib/settings.js';
+import { normalizePortalUrl, migrate, addPortal, portalForUrl } from '../src/lib/settings.js';
+import { displayState, summarize } from '../src/lib/status.js';
+import { notifId, parseNotifId, entryFromId } from '../src/lib/notifier.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -155,6 +157,59 @@ test('normalizePortalUrl', () => {
   eq(normalizePortalUrl('http://intranet.local:8080/'), 'http://intranet.local:8080');
   eq(normalizePortalUrl('nonsense'), '');
   eq(normalizePortalUrl(''), '');
+});
+
+test('migrate folds legacy portalUrl into portals', () => {
+  eq(migrate({ portalUrl: 'https://a.bitrix24.ru', silent: true }), { settings: { silent: true, portals: ['https://a.bitrix24.ru'] }, migrated: true });
+  eq(migrate({ portalUrl: 'https://a.bitrix24.ru', portals: ['https://a.bitrix24.ru'] }).settings.portals, ['https://a.bitrix24.ru']);
+  eq(migrate({ portalUrl: '' }).settings.portals, []);
+  eq(migrate({ portals: ['https://b.bitrix24.ru'] }), { settings: { portals: ['https://b.bitrix24.ru'] }, migrated: false });
+});
+
+test('addPortal normalizes, rejects invalid and duplicates', () => {
+  eq(addPortal([], 'a.bitrix24.ru/online/'), { origin: 'https://a.bitrix24.ru', portals: ['https://a.bitrix24.ru'], error: '' });
+  eq(addPortal(['https://a.bitrix24.ru'], 'https://a.bitrix24.ru/x').error, 'duplicate');
+  eq(addPortal(['https://a.bitrix24.ru'], 'garbage').error, 'invalid');
+  eq(addPortal(['https://a.bitrix24.ru'], 'b.bitrix24.ru').portals, ['https://a.bitrix24.ru', 'https://b.bitrix24.ru']);
+});
+
+test('portalForUrl matches by origin only', () => {
+  const portals = ['https://a.bitrix24.ru', 'https://b.bitrix24.ru'];
+  eq(portalForUrl(portals, 'https://b.bitrix24.ru/online/?IM_DIALOG=1'), 'https://b.bitrix24.ru');
+  eq(portalForUrl(portals, 'https://a.bitrix24.ru.evil.example/'), '');
+  eq(portalForUrl(portals, undefined), '');
+});
+
+test('notification ids carry the portal origin', () => {
+  eq(notifId('https://a.bitrix24.ru', 'chat:chat30'), 'https://a.bitrix24.ru|chat:chat30');
+  eq(parseNotifId('https://a.bitrix24.ru|chat:chat30'), { origin: 'https://a.bitrix24.ru', local: 'chat:chat30' });
+  eq(parseNotifId('test'), { origin: '', local: 'test' });
+});
+
+test('entryFromId rebuilds registry entries for orphaned notifications', () => {
+  const o = 'https://a.bitrix24.ru';
+  eq(entryFromId(`${o}|chat:chat30`), { origin: o, kind: 'chat', shownAt: 0, dialogId: 'chat30', lastId: 0 });
+  eq(entryFromId(`${o}|sys:21`), { origin: o, kind: 'system', shownAt: 0, notifyId: 21 });
+  eq(entryFromId(`${o}|call:4`), { origin: o, kind: 'call', shownAt: 0, callId: 4 });
+  eq(entryFromId(`${o}|summary`), { origin: o, kind: 'summary', shownAt: 0 });
+});
+
+test('displayState and badge summary across portals', () => {
+  const st = (origin, total, pull = 'online') => ({ origin, auth: 'ok', pull, total });
+  eq(displayState({ auth: 'ok', pull: 'online' }), 'online');
+  eq(displayState({ auth: 'ok', pull: 'offline' }), 'polling');
+  eq(displayState({ auth: 'unknown' }), 'connecting');
+  eq(displayState({ auth: 'login' }), 'login');
+  const t = (k, s) => (s ? `${k}(${s.join()})` : k);
+  eq(summarize([], { t }).text, '?');
+  const two = summarize([st('https://a.x', 3), st('https://b.x', 4)], { t });
+  eq([two.text, two.color], ['7', '#d6303c']);
+  eq(two.title.split('\n'), ['extName', 'a.x — statusOnline · unreadCount(3)', 'b.x — statusOnline · unreadCount(4)']);
+  eq(summarize([st('https://a.x', 3), st('https://b.x', 0, 'offline')], { t }).color, '#8a8f99', 'grey when one is polling');
+  const login = summarize([st('https://a.x', 3), { origin: 'https://b.x', auth: 'login', total: 0 }], { t });
+  eq([login.text, login.color], ['!', '#e89b0c']);
+  ok(summarize([st('https://a.x', 120)], { t, muted: true }).title.endsWith('statusMuted'));
+  eq(summarize([st('https://a.x', 120)], { t }).text, '99+');
 });
 
 // --------------------------------------------------------------------- events

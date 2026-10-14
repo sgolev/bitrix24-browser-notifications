@@ -8,25 +8,25 @@
 <body>
   <header>
     <img src="../icons/icon32.png" alt="" width="24" height="24">
-    <div>
-      <div class="title" data-i18n="extName"></div>
-      <div class="muted small" id="portal"></div>
-    </div>
+    <div class="title" data-i18n="extName"></div>
   </header>
-  <section class="status">
-    <span class="dot" id="dot"></span>
-    <span id="state"></span>
-  </section>
-  <section class="info" id="info" hidden>
-    <div class="muted small" id="user"></div>
-    <div class="unread"><span data-i18n="popupUnread"></span>: <b id="unread">0</b></div>
-    <div class="muted small" id="muted" hidden></div>
-  </section>
+  <p class="muted" id="empty" data-i18n="popupStateUnconfigured" hidden></p>
+  <ul id="portals"></ul>
+  <template id="row">
+    <li class="portal">
+      <div class="line">
+        <span class="dot"></span>
+        <span class="host"></span>
+        <span class="unread" hidden></span>
+        <button class="open"></button>
+      </div>
+      <div class="muted small state"></div>
+    </li>
+  </template>
   <section class="actions">
-    <button class="primary" id="open" data-i18n="popupOpen"></button>
-    <button class="primary" id="login" data-i18n="popupLogin" hidden></button>
     <button class="primary" id="setup" data-i18n="popupSetup" hidden></button>
     <button id="mute" hidden></button>
+    <div class="muted small" id="muted" hidden></div>
   </section>
   <footer><a href="#" id="settings" data-i18n="popupSettings"></a></footer>
   <script type="module" src="popup.js"></script>

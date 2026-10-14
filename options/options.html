@@ -17,14 +17,25 @@
   </section>
 
   <section>
-    <h2 data-i18n="optPortal"></h2>
-    <form id="portal-form" class="row">
-      <input id="portal" type="text" inputmode="url" autocomplete="url" placeholder="https://yourcompany.bitrix24.ru" spellcheck="false">
-      <button class="primary" type="submit" data-i18n="optSave"></button>
-    </form>
+    <h2 data-i18n="optPortals"></h2>
+    <div class="portal-list">
+      <ul id="portals"></ul>
+      <template id="row">
+        <li class="portal-row">
+          <div class="portal-info">
+            <div class="portal-name"><span class="dot"></span><span class="host"></span></div>
+            <div class="muted small state"></div>
+          </div>
+          <button type="button" class="action remove" data-i18n="optRemove"></button>
+        </li>
+      </template>
+      <form id="portal-form" class="portal-row add-row">
+        <input id="portal" type="text" inputmode="url" autocomplete="url" placeholder="https://yourcompany.bitrix24.ru" spellcheck="false" aria-labelledby="add-label">
+        <button class="primary action" type="submit" id="add-label" data-i18n="optAddPortal"></button>
+      </form>
+    </div>
     <p class="muted small" data-i18n="optPortalHint"></p>
     <p class="small" id="portal-msg" role="status"></p>
-    <p class="status small"><span class="dot" id="dot"></span> <span id="state"></span></p>
   </section>
 
   <section>

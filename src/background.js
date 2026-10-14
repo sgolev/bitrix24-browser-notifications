@@ -1,13 +1,16 @@
-// Service worker: owns session state, turns Push&Pull events and polling results
-// into desktop notifications, keeps the badge up to date and handles clicks.
+// Service worker: owns per-portal session state, turns Push&Pull events and
+// polling results into desktop notifications, keeps the badge up to date and
+// handles clicks. Any number of portals can be configured; notification
+// settings are shared.
 //
-// The WebSocket itself lives in the offscreen document (offscreen/offscreen.js),
-// which wakes this worker with a runtime message for every batch of events.
+// The WebSockets live in the offscreen document (offscreen/offscreen.js), which
+// wakes this worker with a runtime message for every batch of events.
 
-import { getSettings, originPattern } from './lib/settings.js';
-import { callRest, AuthError } from './lib/portal.js';
+import { getSettings, originPattern, portalForUrl } from './lib/settings.js';
+import { callRest, sessidKey, AuthError } from './lib/portal.js';
 import { interpret } from './lib/events.js';
 import { recentToActions, notificationsToActions, totalUnread } from './lib/poller.js';
+import { DEFAULT_STATE, summarize } from './lib/status.js';
 import * as notifier from './lib/notifier.js';
 
 const TICK_ALARM = 'tick';
@@ -17,52 +20,38 @@ const CATCHUP_MAX_NOTIFICATIONS = 3; // more than this collapses into one summar
 const CALL_RING_MAX_MS = 90 * 1000;
 
 const t = (key, subs) => chrome.i18n.getMessage(key, subs) || key;
+const host = (origin) => new URL(origin).host;
+const { notifId } = notifier;
 
 // All state-changing work runs through one queue so storage updates never interleave.
 let queue = Promise.resolve();
 const enqueue = (fn) => (queue = queue.then(fn).catch((e) => console.error('[b24n]', e)));
 
-// ---------------------------------------------------------------- session state
+// ------------------------------------------------------- per-portal session state
+// storage.session "portal:<origin>" = { auth, pull, total, error, me, lastPollAt }
 
-const DEFAULT_STATUS = { auth: 'unconfigured', pull: 'idle', total: 0, error: '' };
+const stateKey = (origin) => `portal:${origin}`;
 
-async function getSession() {
-  const { status, me, lastPollAt } = await chrome.storage.session.get(['status', 'me', 'lastPollAt']);
-  return { status: { ...DEFAULT_STATUS, ...status }, me: me || null, lastPollAt: lastPollAt || 0 };
+async function getState(origin) {
+  const key = stateKey(origin);
+  return { ...DEFAULT_STATE, ...(await chrome.storage.session.get(key))[key] };
 }
 
-async function setStatus(patch) {
-  const { status } = await getSession();
-  const next = { ...status, ...patch };
-  await chrome.storage.session.set({ status: next });
-  await renderBadge(next);
+async function setState(origin, patch) {
+  const next = { ...(await getState(origin)), ...patch };
+  await chrome.storage.session.set({ [stateKey(origin)]: next });
+  await renderBadge();
   return next;
 }
 
-async function renderBadge(status) {
-  const { muteUntil } = await getSettings();
-  let text = '';
-  let color = '#d6303c';
-  let title = t('extName');
-  if (status.auth === 'unconfigured' || status.auth === 'permission') {
-    text = '?';
-    color = '#8a8f99';
-    title += ` — ${t('statusUnconfigured')}`;
-  } else if (status.auth === 'login') {
-    text = '!';
-    color = '#e89b0c';
-    title += ` — ${t('statusLogin')}`;
-  } else if (status.auth === 'error') {
-    text = '!';
-    color = '#8a8f99';
-    title += ` — ${t('statusError')}`;
-  } else {
-    text = status.total > 99 ? '99+' : status.total > 0 ? String(status.total) : '';
-    if (status.pull !== 'online') color = '#8a8f99';
-    title += ` — ${status.pull === 'online' ? t('statusOnline') : t('statusPolling')}`;
-    if (status.total > 0) title += ` · ${t('unreadCount', [String(status.total)])}`;
-  }
-  if (muteUntil > Date.now()) title += ` · ${t('statusMuted')}`;
+async function getAllStates(portals) {
+  const stored = await chrome.storage.session.get(portals.map(stateKey));
+  return portals.map((origin) => ({ origin, ...DEFAULT_STATE, ...stored[stateKey(origin)] }));
+}
+
+async function renderBadge() {
+  const s = await getSettings();
+  const { text, color, title } = summarize(await getAllStates(s.portals), { t, muted: s.muteUntil > Date.now() });
   await Promise.all([
     chrome.action.setBadgeText({ text }),
     chrome.action.setBadgeBackgroundColor({ color }),
@@ -70,42 +59,45 @@ async function renderBadge(status) {
   ]);
 }
 
-async function portalOrigin() {
-  return (await getSettings()).portalUrl;
-}
-
 // --------------------------------------------------------------- notify cursor
 // Highest message id seen per dialog and highest bell-notification id, so that
 // pull events, catch-up polls and reconnect replays never notify twice.
+// storage.local "cursor:<origin>".
 
-async function loadCursor(key) {
-  const { cursor } = await chrome.storage.local.get('cursor');
+const cursorStoreKey = (origin) => `cursor:${origin}`;
+const cursorKey = (origin, me) => `${origin}|${me.id}`;
+
+async function loadCursor(origin, me) {
+  const key = cursorKey(origin, me);
+  const cursor = (await chrome.storage.local.get(cursorStoreKey(origin)))[cursorStoreKey(origin)];
   return cursor && cursor.key === key ? cursor : { key, lastSeen: {}, lastNotifyId: 0, initialized: false };
 }
 
-function saveCursor(cursor) {
-  return chrome.storage.local.set({ cursor });
+function saveCursor(origin, cursor) {
+  return chrome.storage.local.set({ [cursorStoreKey(origin)]: cursor });
 }
-
-const cursorKey = (origin, me) => `${origin}|${me.id}`;
 
 // ------------------------------------------------------------------ offscreen
 
 let creatingOffscreen = null;
 
+async function hasOffscreen() {
+  return (await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length > 0;
+}
+
 async function ensureOffscreen() {
-  const contexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
-  if (contexts.length) return;
+  if (await hasOffscreen()) return;
   creatingOffscreen ??= chrome.offscreen
     .createDocument({
       url: 'offscreen/offscreen.html',
       reasons: ['WORKERS'],
-      justification: 'Keeps the Bitrix24 real-time (Push&Pull) WebSocket connection open.',
+      justification: 'Keeps the Bitrix24 real-time (Push&Pull) WebSocket connections open.',
     })
     .finally(() => (creatingOffscreen = null));
   await creatingOffscreen;
 }
 
+// Returns the offscreen info map { [origin]: { state, … } } or null.
 async function toOffscreen(cmd, extra = {}) {
   await ensureOffscreen();
   try {
@@ -118,61 +110,84 @@ async function toOffscreen(cmd, extra = {}) {
 async function startPull(origin, fresh = false) {
   try {
     const config = await callRest(origin, 'pull.config.get', fresh ? { CACHE: 'N' } : {});
-    await toOffscreen('start', { config });
+    await toOffscreen('start', { origin, config });
   } catch (e) {
-    await handleError(e);
+    await handleError(origin, e);
   }
 }
 
-async function stopPull() {
-  const contexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
-  if (contexts.length) await chrome.offscreen.closeDocument().catch(() => {});
+// Closes the portal's socket; closes the offscreen document once no socket is left.
+async function stopPull(origin) {
+  if (!(await hasOffscreen())) return;
+  const info = await chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'stop', origin }).catch(() => null);
+  if (!info || !Object.keys(info).length) await chrome.offscreen.closeDocument().catch(() => {});
 }
 
 // --------------------------------------------------------------- lifecycle
 
-async function handleError(e) {
+async function handleError(origin, e) {
   if (e instanceof AuthError) {
-    await stopPull();
-    await chrome.storage.session.remove(['me', 'sessid']);
-    await setStatus({ auth: 'login', pull: 'idle', total: 0, error: '' });
+    await stopPull(origin);
+    await chrome.storage.session.remove(sessidKey(origin));
+    await setState(origin, { auth: 'login', pull: 'idle', total: 0, error: '', me: null });
   } else {
-    console.warn('[b24n]', e);
-    await setStatus({ auth: 'error', error: String(e.message || e) });
+    console.warn('[b24n]', origin, e);
+    await setState(origin, { auth: 'error', error: String(e.message || e) });
   }
 }
 
-// (Re)establishes everything: permission, login, baseline cursor, real-time connection.
-async function init(reason) {
-  const origin = await portalOrigin();
-  if (!origin) {
-    await stopPull();
-    await setStatus({ ...DEFAULT_STATUS });
-    return;
-  }
+// (Re)establishes one portal: permission, login, baseline cursor, real-time connection.
+async function init(origin, reason) {
   if (!(await chrome.permissions.contains({ origins: [originPattern(origin)] }))) {
-    await stopPull();
-    await setStatus({ ...DEFAULT_STATUS, auth: 'permission' });
+    await stopPull(origin);
+    await setState(origin, { ...DEFAULT_STATE, auth: 'permission' });
     return;
   }
-  await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 });
   try {
     const user = await callRest(origin, 'im.user.get');
-    const me = { id: Number(user.id), name: user.name, avatar: user.avatar, origin };
-    await chrome.storage.session.set({ me });
-    await setStatus({ auth: 'ok', error: '' });
+    const me = { id: Number(user.id), name: user.name, avatar: user.avatar };
+    await setState(origin, { auth: 'ok', error: '', me });
     await ensureBaseline(origin, me);
     const info = await toOffscreen('info');
-    if (!info || info.state === 'idle' || reason === 'settings') await startPull(origin);
-    await refreshCounters();
+    const pull = info?.[origin];
+    if (!pull || pull.state === 'idle' || reason === 'added') await startPull(origin);
+    await refreshCounters(origin);
   } catch (e) {
-    await handleError(e);
+    await handleError(origin, e);
   }
+}
+
+async function initAll(reason) {
+  const { portals } = await getSettings();
+  if (portals.length) await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 });
+  else await chrome.alarms.clear(TICK_ALARM);
+  for (const origin of portals) await init(origin, reason);
+  if (!portals.length && (await hasOffscreen())) await chrome.offscreen.closeDocument().catch(() => {});
+  await renderBadge();
+}
+
+// Drops everything kept for a portal that was removed from the settings.
+async function forgetPortal(origin) {
+  await stopPull(origin);
+  await notifier.clearWhere((e) => e.origin === origin);
+  await chrome.storage.session.remove([stateKey(origin), sessidKey(origin)]);
+  await chrome.storage.local.remove(cursorStoreKey(origin));
+}
+
+// Version 1.0 kept single-portal keys; move the cursor, drop the rest.
+async function migrateStorage() {
+  const { cursor } = await chrome.storage.local.get('cursor');
+  if (cursor?.key) {
+    const origin = cursor.key.slice(0, cursor.key.lastIndexOf('|'));
+    await chrome.storage.local.set({ [cursorStoreKey(origin)]: cursor });
+  }
+  await chrome.storage.local.remove('cursor');
+  await chrome.storage.session.remove(['status', 'me', 'sessid', 'lastPollAt']);
 }
 
 // On first run for a portal/user, remember what already exists without notifying.
 async function ensureBaseline(origin, me) {
-  const cursor = await loadCursor(cursorKey(origin, me));
+  const cursor = await loadCursor(origin, me);
   if (cursor.initialized) return;
   const [recent, notify] = await Promise.all([
     callRest(origin, 'im.recent.list', { LIMIT: 50 }),
@@ -183,21 +198,20 @@ async function ensureBaseline(origin, me) {
   }
   for (const n of notify?.notifications || []) cursor.lastNotifyId = Math.max(cursor.lastNotifyId, Number(n.id));
   cursor.initialized = true;
-  await saveCursor(cursor);
-  await chrome.storage.session.set({ lastPollAt: Date.now() });
+  await saveCursor(origin, cursor);
+  await setState(origin, { lastPollAt: Date.now() });
 }
 
 // Polls REST for anything the real-time channel did not deliver.
-async function catchUp() {
-  const { status, me } = await getSession();
-  if (status.auth !== 'ok' || !me) return;
-  const origin = me.origin;
+async function catchUp(origin) {
+  const { auth, me } = await getState(origin);
+  if (auth !== 'ok' || !me) return;
   try {
     const [recent, notify] = await Promise.all([
       callRest(origin, 'im.recent.list', { LIMIT: 50 }),
       callRest(origin, 'im.notify.get', { LIMIT: 30 }),
     ]);
-    const cursor = await loadCursor(cursorKey(origin, me));
+    const cursor = await loadCursor(origin, me);
     const now = Date.now();
     const chats = recentToActions(recent?.items, {
       myId: me.id,
@@ -214,23 +228,29 @@ async function catchUp() {
     });
     const actions = [...chats.actions, ...system.actions];
     if (actions.length > CATCHUP_MAX_NOTIFICATIONS) {
-      await notifySummary(actions);
+      await notifySummary(origin, actions);
     } else {
-      await applyActions(actions);
+      await applyActions(origin, actions);
     }
     // Advance the cursor past everything inspected (applyActions may have saved it meanwhile).
-    const updated = await loadCursor(cursorKey(origin, me));
+    const updated = await loadCursor(origin, me);
     for (const [d, id] of Object.entries(chats.seen)) updated.lastSeen[d] = Math.max(updated.lastSeen[d] || 0, id);
     updated.lastNotifyId = Math.max(updated.lastNotifyId, system.maxId);
-    await saveCursor(updated);
-    await chrome.storage.session.set({ lastPollAt: now });
-    await refreshCounters();
+    await saveCursor(origin, updated);
+    await setState(origin, { lastPollAt: now });
+    await refreshCounters(origin);
   } catch (e) {
-    await handleError(e);
+    await handleError(origin, e);
   }
 }
 
-async function notifySummary(actions) {
+// Shown under the notification text when several portals are configured.
+async function portalLabel(origin) {
+  const { portals } = await getSettings();
+  return portals.length > 1 ? { contextMessage: host(origin) } : {};
+}
+
+async function notifySummary(origin, actions) {
   const s = await getSettings();
   if (s.muteUntil > Date.now()) return;
   const chats = actions.filter((a) => a.kind === 'chat' && (a.group ? s.notifyGroup : s.notifyPrivate));
@@ -239,27 +259,28 @@ async function notifySummary(actions) {
   const lines = [];
   if (chats.length) lines.push(t('summaryChats', [String(chats.length)]) + ': ' + [...new Set(chats.map((a) => a.title))].join(', '));
   if (system.length) lines.push(t('summaryNotifications', [String(system.length)]));
-  await notifier.show('summary', { kind: 'summary' }, {
+  await notifier.show(notifId(origin, 'summary'), { kind: 'summary', origin }, {
     title: t('summaryTitle'),
     message: lines.join('\n'),
     silent: s.silent,
+    ...(await portalLabel(origin)),
   });
 }
 
-let countersTimer = null;
-function scheduleCounters() {
-  clearTimeout(countersTimer);
-  countersTimer = setTimeout(() => enqueue(refreshCounters), 1000);
+const countersTimers = new Map();
+function scheduleCounters(origin) {
+  clearTimeout(countersTimers.get(origin));
+  countersTimers.set(origin, setTimeout(() => enqueue(() => refreshCounters(origin)), 1000));
 }
 
-async function refreshCounters() {
-  const { status, me } = await getSession();
-  if (status.auth !== 'ok' || !me) return;
+async function refreshCounters(origin) {
+  const { auth } = await getState(origin);
+  if (auth !== 'ok') return;
   try {
-    const counters = await callRest(me.origin, 'im.counters.get');
-    await setStatus({ total: totalUnread(counters) });
+    const counters = await callRest(origin, 'im.counters.get');
+    await setState(origin, { total: totalUnread(counters) });
   } catch (e) {
-    await handleError(e);
+    await handleError(origin, e);
   }
 }
 
@@ -276,17 +297,18 @@ async function portalFocused(origin) {
   }
 }
 
-async function applyActions(actions) {
+async function applyActions(origin, actions) {
   if (!actions.length) return;
-  const { me } = await getSession();
+  const { me } = await getState(origin);
   if (!me) return;
-  const origin = me.origin;
   const s = await getSettings();
-  const cursor = await loadCursor(cursorKey(origin, me));
+  const cursor = await loadCursor(origin, me);
+  const label = await portalLabel(origin);
   let dirty = false;
   const muted = s.muteUntil > Date.now();
   let focused = null;
   const quiet = async () => muted || (s.suppressWhenFocused && (focused ??= await portalFocused(origin)));
+  const mine = (kind) => (e) => e.origin === origin && e.kind === kind;
 
   for (const a of actions) {
     switch (a.kind) {
@@ -295,16 +317,17 @@ async function applyActions(actions) {
         cursor.lastSeen[a.dialogId] = a.messageId;
         dirty = true;
         if (!(a.group ? s.notifyGroup : s.notifyPrivate) || (await quiet())) break;
-        const id = `chat:${a.dialogId}`;
+        const id = notifId(origin, `chat:${a.dialogId}`);
         const prev = await notifier.lookup(id);
-        const count = a.count || (prev ? prev.count + 1 : 1);
-        await notifier.show(id, { kind: 'chat', dialogId: a.dialogId, lastId: a.messageId, count }, {
+        const count = a.count || (prev?.count || 0) + 1;
+        await notifier.show(id, { kind: 'chat', origin, dialogId: a.dialogId, lastId: a.messageId, count }, {
           title: count > 1 ? `${a.title} (${count})` : a.title,
           message: s.showText ? a.body : t('newMessage'),
           iconUrl: await notifier.iconFor(a.avatar, origin),
           buttons: [{ title: t('markRead') }],
           silent: s.silent,
           priority: 1,
+          ...label,
         });
         break;
       }
@@ -316,35 +339,36 @@ async function applyActions(actions) {
           dirty = true;
         }
         if (a.kind === 'seen') break;
-        const id = `chat:${a.dialogId}`;
+        const id = notifId(origin, `chat:${a.dialogId}`);
         const prev = await notifier.lookup(id);
         if (prev && a.lastId >= prev.lastId) await notifier.clear(id);
         break;
       }
       case 'dismiss-chats':
-        await notifier.clearWhere((e) => e.kind === 'chat');
+        await notifier.clearWhere(mine('chat'));
         break;
       case 'system': {
         if (a.notifyId <= cursor.lastNotifyId) break;
         cursor.lastNotifyId = a.notifyId;
         dirty = true;
         if (!s.notifySystem || (await quiet())) break;
-        await notifier.show(`sys:${a.notifyId}`, { kind: 'system', notifyId: a.notifyId, link: a.link }, {
+        await notifier.show(notifId(origin, `sys:${a.notifyId}`), { kind: 'system', origin, notifyId: a.notifyId, link: a.link }, {
           title: a.title,
           message: s.showText ? a.body : t('newNotification'),
           iconUrl: await notifier.iconFor(a.avatar, origin),
           buttons: [{ title: t('markRead') }],
           silent: s.silent || a.silent,
+          ...label,
         });
         break;
       }
       case 'dismiss-system':
-        if (a.ids.length) await Promise.all(a.ids.map((id) => notifier.clear(`sys:${id}`)));
-        else await notifier.clearWhere((e) => e.kind === 'system');
+        if (a.ids.length) await Promise.all(a.ids.map((id) => notifier.clear(notifId(origin, `sys:${id}`))));
+        else await notifier.clearWhere(mine('system'));
         break;
       case 'call':
         if (!s.notifyCalls || (await quiet())) break;
-        await notifier.show(`call:${a.callId}`, { kind: 'call', callId: a.callId, dialogId: a.dialogId }, {
+        await notifier.show(notifId(origin, `call:${a.callId}`), { kind: 'call', origin, callId: a.callId, dialogId: a.dialogId }, {
           title: a.title,
           message: a.name,
           iconUrl: await notifier.iconFor(a.avatar, origin),
@@ -352,53 +376,62 @@ async function applyActions(actions) {
           requireInteraction: true,
           priority: 2,
           silent: s.silent,
+          ...label,
         });
         break;
       case 'dismiss-call':
-        await notifier.clear(`call:${a.callId}`);
+        await notifier.clear(notifId(origin, `call:${a.callId}`));
         break;
       case 'missed-call':
         if (!s.notifyMissedCalls || muted) break;
-        await notifier.show(`missed:${a.callId}`, { kind: 'missed', dialogId: a.dialogId }, {
+        await notifier.show(notifId(origin, `missed:${a.callId}`), { kind: 'missed', origin, dialogId: a.dialogId }, {
           title: a.title,
           message: a.name,
           iconUrl: await notifier.iconFor(a.avatar, origin),
           silent: s.silent,
+          ...label,
         });
         break;
       case 'counters':
-        scheduleCounters();
+        scheduleCounters(origin);
         break;
       default:
     }
   }
-  if (dirty) await saveCursor(cursor);
+  if (dirty) await saveCursor(origin, cursor);
 }
 
-async function onPullEvents(events) {
-  const { me } = await getSession();
+async function onPullEvents(origin, events) {
+  const { me } = await getState(origin);
   if (!me) return;
   const actions = events.flatMap((e) => interpret(e, { myId: me.id, t }));
-  await applyActions(actions);
+  await applyActions(origin, actions);
 }
 
-async function onPullState(state, detail) {
-  const { status } = await getSession();
-  await setStatus({ pull: state });
+async function onPullState(origin, state, detail) {
+  const prev = await getState(origin);
+  await setState(origin, { pull: state });
   // Reconnected after a gap: fetch whatever was missed.
-  if (state === 'online' && status.pull !== 'online') await catchUp();
-  if (state === 'disabled') await catchUp();
-  if (detail?.code) console.info('[b24n] pull', state, detail);
+  if (state === 'online' && prev.pull !== 'online') await catchUp(origin);
+  if (state === 'disabled') await catchUp(origin);
+  if (detail?.code) console.info('[b24n] pull', origin, state, detail);
 }
 
 async function tick() {
-  const { status, lastPollAt } = await getSession();
-  if (status.auth !== 'ok') return init('tick');
-  const origin = await portalOrigin();
-  const info = await toOffscreen('info');
-  if (!info || info.state === 'idle') await startPull(origin);
-  else if (info.state !== status.pull) await setStatus({ pull: info.state });
-  if ((info?.state !== 'online') || Date.now() - lastPollAt > SAFETY_POLL_MS) await catchUp();
+  const { portals } = await getSettings();
+  const states = await getAllStates(portals);
+  const info = states.some((st) => st.auth === 'ok') ? await toOffscreen('info') : null;
+  for (const st of states) {
+    const { origin } = st;
+    if (st.auth !== 'ok') {
+      await init(origin, 'tick');
+      continue;
+    }
+    const pull = info?.[origin];
+    if (!pull || pull.state === 'idle') await startPull(origin);
+    else if (pull.state !== st.pull) await setState(origin, { pull: pull.state });
+    if (pull?.state !== 'online' || Date.now() - st.lastPollAt > SAFETY_POLL_MS) await catchUp(origin);
+  }
   await notifier.clearWhere((e) => e.kind === 'call' && Date.now() - e.shownAt > CALL_RING_MAX_MS);
   await notifier.prune();
 }
@@ -415,7 +448,7 @@ function openInPage(what, dialogId) {
 }
 
 async function openTarget(entry) {
-  const origin = await portalOrigin();
+  const origin = entry.origin || (await getSettings()).portals[0];
   if (!origin) return;
   if (entry.kind === 'system' && entry.link) {
     const tab = await chrome.tabs.create({ url: entry.link });
@@ -451,23 +484,22 @@ async function openTarget(entry) {
 async function onClicked(id) {
   const entry = await notifier.lookup(id);
   await notifier.clear(id);
-  if (entry) await openTarget(entry);
-  else await openTarget({ kind: 'summary' });
+  await openTarget(entry || { kind: 'summary', origin: notifier.parseNotifId(id).origin });
 }
 
 async function onButtonClicked(id, index) {
   const entry = await notifier.lookup(id);
   await notifier.clear(id);
-  if (!entry || index !== 0) return;
-  const origin = await portalOrigin();
+  if (!entry?.origin || index !== 0) return;
+  const { origin } = entry;
   try {
     if (entry.kind === 'chat') await callRest(origin, 'im.dialog.read', { DIALOG_ID: entry.dialogId });
     else if (entry.kind === 'system') await callRest(origin, 'im.notify.read', { ID: entry.notifyId, ONLY_CURRENT: 'Y' });
     else await openTarget(entry);
   } catch (e) {
-    await handleError(e);
+    await handleError(origin, e);
   }
-  scheduleCounters();
+  scheduleCounters(origin);
 }
 
 // --------------------------------------------------------------- listeners
@@ -475,9 +507,12 @@ async function onButtonClicked(id, index) {
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   // First install: the extension does nothing until a portal is entered, so say so.
   if (reason === 'install') chrome.runtime.openOptionsPage();
-  enqueue(() => init('installed'));
+  enqueue(async () => {
+    if (reason === 'update') await migrateStorage();
+    await initAll('installed');
+  });
 });
-chrome.runtime.onStartup.addListener(() => enqueue(() => init('startup')));
+chrome.runtime.onStartup.addListener(() => enqueue(() => initAll('startup')));
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TICK_ALARM) enqueue(tick);
@@ -487,20 +522,25 @@ chrome.notifications.onClicked.addListener((id) => enqueue(() => onClicked(id)))
 chrome.notifications.onButtonClicked.addListener((id, index) => enqueue(() => onButtonClicked(id, index)));
 chrome.notifications.onClosed.addListener((id) => enqueue(() => notifier.forget(id)));
 
-chrome.permissions.onAdded.addListener(() => enqueue(() => init('permission')));
-chrome.permissions.onRemoved.addListener(() => enqueue(() => init('permission')));
+chrome.permissions.onAdded.addListener(() => enqueue(() => initAll('permission')));
+chrome.permissions.onRemoved.addListener(() => enqueue(() => initAll('permission')));
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync') return;
-  if (changes.portalUrl) {
+  if (changes.portals) {
+    const before = changes.portals.oldValue || [];
+    const after = changes.portals.newValue || [];
     enqueue(async () => {
-      await stopPull();
-      await notifier.clearAll();
-      await chrome.storage.session.remove(['me', 'sessid', 'status', 'lastPollAt']);
-      await init('settings');
+      for (const origin of before.filter((o) => !after.includes(o))) await forgetPortal(origin);
+      for (const origin of after.filter((o) => !before.includes(o))) {
+        if ((await getState(origin)).auth !== 'ok') await init(origin, 'added');
+      }
+      if (after.length) await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 });
+      else await chrome.alarms.clear(TICK_ALARM);
+      await renderBadge();
     });
   } else if (changes.muteUntil) {
-    enqueue(async () => renderBadge((await getSession()).status));
+    enqueue(renderBadge);
   }
 });
 
@@ -508,39 +548,42 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
   if (change.status !== 'complete' || !tab.url) return;
   enqueue(async () => {
-    const origin = await portalOrigin();
-    if (!origin || !tab.url.startsWith(origin + '/')) return;
-    const { status } = await getSession();
-    if (status.auth !== 'ok') await init('portal-tab');
+    const origin = portalForUrl((await getSettings()).portals, tab.url);
+    if (origin && (await getState(origin)).auth !== 'ok') await init(origin, 'portal-tab');
   });
 });
+
+async function stateForUi() {
+  const settings = await getSettings();
+  return { settings, portals: await getAllStates(settings.portals) };
+}
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.target !== 'background') return;
   switch (msg.cmd) {
     case 'pull-events':
-      enqueue(() => onPullEvents(msg.events));
-      return;
     case 'pull-state':
-      enqueue(() => onPullState(msg.state, msg.detail));
-      return;
     case 'pull-need-config':
       enqueue(async () => {
-        const origin = await portalOrigin();
-        if (origin) await startPull(origin, true);
+        // A socket for a portal that has since been removed: shut it down.
+        if (!(await getSettings()).portals.includes(msg.origin)) return stopPull(msg.origin);
+        if (msg.cmd === 'pull-events') await onPullEvents(msg.origin, msg.events);
+        else if (msg.cmd === 'pull-state') await onPullState(msg.origin, msg.state, msg.detail);
+        else await startPull(msg.origin, true);
       });
       return;
     case 'get-state':
-      enqueue(async () => reply({ ...(await getSession()), settings: await getSettings() }));
+      enqueue(async () => reply(await stateForUi()));
       return true;
     case 'refresh':
       enqueue(async () => {
-        await init('refresh');
-        reply({ ...(await getSession()), settings: await getSettings() });
+        if (msg.origin) await init(msg.origin, 'refresh');
+        else await initAll('refresh');
+        reply(await stateForUi());
       });
       return true;
     case 'open-portal':
-      enqueue(() => openTarget({ kind: 'portal' }));
+      enqueue(() => openTarget({ kind: 'portal', origin: msg.origin }));
       return;
     case 'test-notification':
       enqueue(async () => {
@@ -557,9 +600,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
 
 // Debug handle for the service worker DevTools console (also used by E2E scripts).
 globalThis.b24n = {
-  init: () => enqueue(() => init('debug')),
+  init: (origin) => enqueue(() => (origin ? init(origin, 'debug') : initAll('debug'))),
   tick: () => enqueue(tick),
-  catchUp: () => enqueue(catchUp),
+  catchUp: (origin) => enqueue(() => catchUp(origin)),
   click: (id) => enqueue(() => onClicked(id)),
   button: (id, index = 0) => enqueue(() => onButtonClicked(id, index)),
 };

@@ -1,36 +1,43 @@
-import { localize, t } from '../src/ui/i18n.js';
-import { DEFAULTS, getSettings, setSettings, normalizePortalUrl, originPattern } from '../src/lib/settings.js';
+import { localize, t, STATE_UI } from '../src/ui/i18n.js';
+import { getSettings, setSettings, addPortal, originPattern } from '../src/lib/settings.js';
+import { displayState } from '../src/lib/status.js';
 
 const $ = (id) => document.getElementById(id);
-
-const STATES = {
-  online: ['ok', 'popupStateOnline'],
-  polling: ['off', 'popupStatePolling'],
-  login: ['warn', 'popupStateLogin'],
-  unconfigured: ['off', 'popupStateUnconfigured'],
-  permission: ['warn', 'popupStatePermission'],
-  error: ['warn', 'popupStateError'],
-};
+const ask = (cmd, extra = {}) => chrome.runtime.sendMessage({ target: 'background', cmd, ...extra });
 
 function message(text, isError = false) {
   $('portal-msg').textContent = text;
   $('portal-msg').className = `small${isError ? ' error' : ''}`;
 }
 
-async function renderStatus() {
-  const { status, settings } = await chrome.runtime.sendMessage({ target: 'background', cmd: 'get-state' });
-  $('welcome').hidden = !!settings.portalUrl;
-  const key = status.auth === 'ok' ? (status.pull === 'online' ? 'online' : 'polling') : status.auth;
-  const [dot, label] = STATES[key] || STATES.error;
-  $('dot').className = `dot ${dot}`;
-  $('state').textContent = t(label) + (status.error ? ` (${status.error})` : '');
+function renderPortal(p) {
+  const li = $('row').content.firstElementChild.cloneNode(true);
+  localize(li);
+  const d = displayState(p);
+  const [dot, label] = STATE_UI[d] || STATE_UI.error;
+  li.querySelector('.dot').className = `dot ${dot}`;
+  li.querySelector('.host').textContent = new URL(p.origin).host;
+  li.querySelector('.state').textContent = t(label) + (p.error ? ` (${p.error})` : '');
+  li.querySelector('.remove').onclick = async () => {
+    const { portals } = await getSettings();
+    await setSettings({ portals: portals.filter((o) => o !== p.origin) });
+    chrome.permissions.remove({ origins: [originPattern(p.origin)] }).catch(() => {});
+  };
+  return li;
+}
+
+let shown = []; // origins currently listed
+
+async function render() {
+  const { portals } = await ask('get-state');
+  shown = portals.map((p) => p.origin);
+  $('portals').replaceChildren(...portals.map(renderPortal));
+  $('welcome').hidden = portals.length > 0;
+  if (!portals.length) $('portal').focus();
 }
 
 localize();
 const settings = await getSettings();
-$('portal').value = settings.portalUrl;
-// Right after install: point the user at the one thing they have to do.
-if (!settings.portalUrl) $('portal').focus();
 for (const box of document.querySelectorAll('input[data-key]')) {
   box.checked = !!settings[box.dataset.key];
   box.onchange = () => setSettings({ [box.dataset.key]: box.checked });
@@ -38,22 +45,24 @@ for (const box of document.querySelectorAll('input[data-key]')) {
 
 $('portal-form').onsubmit = (e) => {
   e.preventDefault();
-  const origin = normalizePortalUrl($('portal').value);
-  if (!origin) return message(t('optInvalidUrl'), true);
-  $('portal').value = origin;
-  // Must be requested straight from the user gesture.
+  // Validate synchronously against the list rendered on the page, so the permission
+  // request below still runs inside the user gesture.
+  const { origin, error } = addPortal(shown, $('portal').value);
+  if (error === 'invalid') return message(t('optInvalidUrl'), true);
+  if (error === 'duplicate') return message(t('optDuplicate'), true);
   chrome.permissions.request({ origins: [originPattern(origin)] }).then(async (granted) => {
     if (!granted) return message(t('optPermissionDenied'), true);
-    await setSettings({ portalUrl: origin, muteUntil: DEFAULTS.muteUntil });
+    const latest = await getSettings();
+    const res = addPortal(latest.portals, origin);
+    if (!res.error) await setSettings({ portals: res.portals });
+    $('portal').value = '';
     message(t('optSaved'));
-    // Same URL saved again does not fire storage.onChanged; reconnect explicitly.
-    chrome.runtime.sendMessage({ target: 'background', cmd: 'refresh' });
   });
 };
 
-$('test').onclick = () => chrome.runtime.sendMessage({ target: 'background', cmd: 'test-notification' });
+$('test').onclick = () => ask('test-notification');
 
 chrome.storage.onChanged.addListener((_changes, area) => {
-  if (area === 'session' || area === 'sync') renderStatus();
+  if (area === 'session' || area === 'sync') render();
 });
-renderStatus();
+render();

@@ -1,64 +1,182 @@
 {
-  "extName": { "message": "Уведомления Битрикс24" },
-  "extDescription": { "message": "Уведомления на рабочем столе о сообщениях, уведомлениях и звонках Битрикс24, даже когда вкладка портала закрыта." },
-
-  "statusUnconfigured": { "message": "не настроено" },
-  "statusLogin": { "message": "войдите в Битрикс24" },
-  "statusError": { "message": "проблема со связью" },
-  "statusOnline": { "message": "в реальном времени" },
-  "statusPolling": { "message": "проверка раз в минуту" },
-  "statusMuted": { "message": "без звука" },
-  "unreadCount": { "message": "непрочитанных: $1" },
-
-  "file": { "message": "[Файл]" },
-  "incomingCall": { "message": "Входящий звонок" },
-  "incomingVideoCall": { "message": "Входящий видеозвонок" },
-  "missedCall": { "message": "Пропущенный звонок" },
-  "systemTitle": { "message": "Битрикс24" },
-  "newMessage": { "message": "Новое сообщение" },
-  "newNotification": { "message": "Новое уведомление" },
-  "markRead": { "message": "Прочитано" },
-  "answer": { "message": "Ответить" },
-  "summaryTitle": { "message": "Непрочитанное в Битрикс24" },
-  "summaryChats": { "message": "Чатов с новыми сообщениями: $1" },
-  "summaryNotifications": { "message": "Новых уведомлений: $1" },
-  "testTitle": { "message": "Уведомления Битрикс24" },
-  "testBody": { "message": "Уведомления работают." },
-
-  "popupStateOnline": { "message": "Подключено, в реальном времени" },
-  "popupStatePolling": { "message": "Подключено, проверка раз в минуту" },
-  "popupStateLogin": { "message": "Вы не вошли на портал" },
-  "popupStateUnconfigured": { "message": "Укажите адрес вашего Битрикс24" },
-  "popupStatePermission": { "message": "Нет доступа к порталу" },
-  "popupStateError": { "message": "Портал недоступен" },
-  "popupUnread": { "message": "Непрочитанные" },
-  "popupOpen": { "message": "Открыть Битрикс24" },
-  "popupLogin": { "message": "Войти" },
-  "popupSetup": { "message": "Настроить" },
-  "popupMute": { "message": "Без звука на 1 час" },
-  "popupUnmute": { "message": "Включить уведомления" },
-  "popupMutedUntil": { "message": "Без уведомлений до $1" },
-  "popupSettings": { "message": "Настройки" },
-
-  "optTitle": { "message": "Уведомления Битрикс24 — настройки" },
-  "optWelcomeTitle": { "message": "Добро пожаловать!" },
-  "optWelcome": { "message": "Укажите ниже адрес вашего Битрикс24, чтобы получать уведомления." },
-  "optPortal": { "message": "Портал" },
-  "optPortalHint": { "message": "Адрес вашего Битрикс24, например https://yourcompany.bitrix24.ru. Войдите на портал в этом браузере как обычно — расширение использует этот вход." },
-  "optSave": { "message": "Сохранить" },
-  "optSaved": { "message": "Сохранено." },
-  "optInvalidUrl": { "message": "Это не похоже на адрес портала." },
-  "optPermissionDenied": { "message": "Доступ к порталу не разрешён, расширение не сможет работать." },
-  "optNotify": { "message": "Уведомлять о" },
-  "optPrivate": { "message": "Личных сообщениях" },
-  "optGroup": { "message": "Сообщениях в групповых чатах" },
-  "optSystem": { "message": "Уведомлениях (задачи, упоминания, комментарии, …)" },
-  "optCalls": { "message": "Входящих звонках" },
-  "optMissedCalls": { "message": "Пропущенных звонках" },
-  "optBehaviour": { "message": "Поведение" },
-  "optShowText": { "message": "Показывать текст сообщения (отключите для приватности)" },
-  "optSuppress": { "message": "Не уведомлять, пока вкладка портала активна" },
-  "optSilent": { "message": "Беззвучные уведомления" },
-  "optTest": { "message": "Отправить тестовое уведомление" },
-  "optTip": { "message": "Совет: если самому сайту портала разрешено показывать уведомления, при открытой вкладке они могут дублироваться. Уведомления для сайта портала можно запретить в настройках сайта в браузере." }
+  "extName": {
+    "message": "Уведомления Битрикс24"
+  },
+  "extDescription": {
+    "message": "Уведомления на рабочем столе о сообщениях, уведомлениях и звонках Битрикс24, даже когда вкладка портала закрыта."
+  },
+  "statusUnconfigured": {
+    "message": "не настроено"
+  },
+  "statusLogin": {
+    "message": "войдите в Битрикс24"
+  },
+  "statusError": {
+    "message": "проблема со связью"
+  },
+  "statusOnline": {
+    "message": "в реальном времени"
+  },
+  "statusPolling": {
+    "message": "проверка раз в минуту"
+  },
+  "statusMuted": {
+    "message": "без звука"
+  },
+  "unreadCount": {
+    "message": "непрочитанных: $1"
+  },
+  "file": {
+    "message": "[Файл]"
+  },
+  "incomingCall": {
+    "message": "Входящий звонок"
+  },
+  "incomingVideoCall": {
+    "message": "Входящий видеозвонок"
+  },
+  "missedCall": {
+    "message": "Пропущенный звонок"
+  },
+  "systemTitle": {
+    "message": "Битрикс24"
+  },
+  "newMessage": {
+    "message": "Новое сообщение"
+  },
+  "newNotification": {
+    "message": "Новое уведомление"
+  },
+  "markRead": {
+    "message": "Прочитано"
+  },
+  "answer": {
+    "message": "Ответить"
+  },
+  "summaryTitle": {
+    "message": "Непрочитанное в Битрикс24"
+  },
+  "summaryChats": {
+    "message": "Чатов с новыми сообщениями: $1"
+  },
+  "summaryNotifications": {
+    "message": "Новых уведомлений: $1"
+  },
+  "testTitle": {
+    "message": "Уведомления Битрикс24"
+  },
+  "testBody": {
+    "message": "Уведомления работают."
+  },
+  "popupStateOnline": {
+    "message": "Подключено, в реальном времени"
+  },
+  "popupStatePolling": {
+    "message": "Подключено, проверка раз в минуту"
+  },
+  "popupStateLogin": {
+    "message": "Вы не вошли на портал"
+  },
+  "popupStateUnconfigured": {
+    "message": "Укажите адрес вашего Битрикс24"
+  },
+  "popupStatePermission": {
+    "message": "Нет доступа к порталу"
+  },
+  "popupStateError": {
+    "message": "Портал недоступен"
+  },
+  "popupLogin": {
+    "message": "Войти"
+  },
+  "popupSetup": {
+    "message": "Настроить"
+  },
+  "popupMute": {
+    "message": "Без звука на 1 час"
+  },
+  "popupUnmute": {
+    "message": "Включить уведомления"
+  },
+  "popupMutedUntil": {
+    "message": "Без уведомлений до $1"
+  },
+  "popupSettings": {
+    "message": "Настройки"
+  },
+  "optTitle": {
+    "message": "Уведомления Битрикс24 — настройки"
+  },
+  "optPortalHint": {
+    "message": "Адрес Битрикс24, например https://yourcompany.bitrix24.ru. Войдите на портал в этом браузере как обычно — расширение использует этот вход."
+  },
+  "optSaved": {
+    "message": "Сохранено."
+  },
+  "optInvalidUrl": {
+    "message": "Это не похоже на адрес портала."
+  },
+  "optPermissionDenied": {
+    "message": "Доступ к порталу не разрешён, расширение не сможет работать."
+  },
+  "optNotify": {
+    "message": "Уведомлять о"
+  },
+  "optPrivate": {
+    "message": "Личных сообщениях"
+  },
+  "optGroup": {
+    "message": "Сообщениях в групповых чатах"
+  },
+  "optSystem": {
+    "message": "Уведомлениях (задачи, упоминания, комментарии, …)"
+  },
+  "optCalls": {
+    "message": "Входящих звонках"
+  },
+  "optMissedCalls": {
+    "message": "Пропущенных звонках"
+  },
+  "optBehaviour": {
+    "message": "Поведение"
+  },
+  "optShowText": {
+    "message": "Показывать текст сообщения (отключите для приватности)"
+  },
+  "optSuppress": {
+    "message": "Не уведомлять, пока вкладка портала активна"
+  },
+  "optSilent": {
+    "message": "Беззвучные уведомления"
+  },
+  "optTest": {
+    "message": "Отправить тестовое уведомление"
+  },
+  "optTip": {
+    "message": "Совет: если самому сайту портала разрешено показывать уведомления, при открытой вкладке они могут дублироваться. Уведомления для сайта портала можно запретить в настройках сайта в браузере."
+  },
+  "popupStateConnecting": {
+    "message": "Подключение…"
+  },
+  "optPortals": {
+    "message": "Порталы"
+  },
+  "optAddPortal": {
+    "message": "Добавить портал"
+  },
+  "optRemove": {
+    "message": "Удалить"
+  },
+  "optWelcomeTitle": {
+    "message": "Добро пожаловать!"
+  },
+  "optWelcome": {
+    "message": "Укажите ниже адрес вашего Битрикс24, чтобы получать уведомления. Можно добавить несколько порталов."
+  },
+  "optDuplicate": {
+    "message": "Этот портал уже есть в списке."
+  },
+  "popupOpenShort": {
+    "message": "Открыть"
+  }
 }

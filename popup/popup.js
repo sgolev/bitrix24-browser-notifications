@@ -1,57 +1,52 @@
-import { localize, t } from '../src/ui/i18n.js';
+import { localize, t, STATE_UI } from '../src/ui/i18n.js';
 import { setSettings } from '../src/lib/settings.js';
+import { displayState } from '../src/lib/status.js';
 
 const $ = (id) => document.getElementById(id);
 
-const STATES = {
-  online: ['ok', 'popupStateOnline'],
-  polling: ['off', 'popupStatePolling'],
-  login: ['warn', 'popupStateLogin'],
-  unconfigured: ['off', 'popupStateUnconfigured'],
-  permission: ['warn', 'popupStatePermission'],
-  error: ['warn', 'popupStateError'],
-};
+const ask = (cmd, extra = {}) => chrome.runtime.sendMessage({ target: 'background', cmd, ...extra });
 
-function render({ status, me, settings }) {
-  const auth = status.auth;
-  const key = auth === 'ok' ? (status.pull === 'online' ? 'online' : 'polling') : auth;
-  const [dot, label] = STATES[key] || STATES.error;
-  $('dot').className = `dot ${dot}`;
-  $('state').textContent = t(label);
-  $('portal').textContent = settings.portalUrl ? new URL(settings.portalUrl).host : '';
+function renderPortal(p) {
+  const li = $('row').content.firstElementChild.cloneNode(true);
+  const d = displayState(p);
+  const [dot, label] = STATE_UI[d] || STATE_UI.error;
+  li.querySelector('.dot').className = `dot ${dot}`;
+  li.querySelector('.host').textContent = new URL(p.origin).host;
+  li.querySelector('.state').textContent = [t(label), d === 'online' || d === 'polling' ? p.me?.name : ''].filter(Boolean).join(' · ');
+  const unread = li.querySelector('.unread');
+  unread.hidden = !(p.auth === 'ok' && p.total > 0);
+  unread.textContent = p.total > 99 ? '99+' : String(p.total);
+  const open = li.querySelector('.open');
+  open.textContent = t(d === 'login' ? 'popupLogin' : 'popupOpenShort');
+  open.hidden = d === 'permission';
+  open.onclick = () => {
+    ask('open-portal', { origin: p.origin });
+    window.close();
+  };
+  return li;
+}
 
-  const ok = auth === 'ok';
-  $('info').hidden = !ok;
-  $('open').hidden = !settings.portalUrl || auth === 'login';
-  $('login').hidden = auth !== 'login';
-  $('setup').hidden = !(auth === 'unconfigured' || auth === 'permission');
-  $('mute').hidden = !ok;
-  if (ok) {
-    $('user').textContent = me?.name || '';
-    $('unread').textContent = String(status.total || 0);
-    const muted = settings.muteUntil > Date.now();
-    $('mute').textContent = t(muted ? 'popupUnmute' : 'popupMute');
-    $('mute').dataset.muted = muted ? '1' : '';
-    $('muted').hidden = !muted;
-    if (muted) {
-      const time = new Date(settings.muteUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      $('muted').textContent = t('popupMutedUntil', [time]);
-    }
+function render({ settings, portals }) {
+  $('portals').replaceChildren(...portals.map(renderPortal));
+  const none = !portals.length;
+  $('empty').hidden = !none;
+  $('setup').hidden = !none && !portals.some((p) => p.auth === 'permission');
+  $('mute').hidden = none;
+  const muted = settings.muteUntil > Date.now();
+  $('mute').textContent = t(muted ? 'popupUnmute' : 'popupMute');
+  $('mute').dataset.muted = muted ? '1' : '';
+  $('muted').hidden = !muted;
+  if (muted) {
+    const time = new Date(settings.muteUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    $('muted').textContent = t('popupMutedUntil', [time]);
   }
 }
 
-const ask = (cmd) => chrome.runtime.sendMessage({ target: 'background', cmd });
-
 localize();
 render(await ask('get-state'));
-// Re-check the session in the background (e.g. the user has just logged in).
+// Re-check the sessions in the background (e.g. the user has just logged in).
 ask('refresh').then(render);
 
-$('open').onclick = () => {
-  ask('open-portal');
-  window.close();
-};
-$('login').onclick = $('open').onclick;
 $('setup').onclick = () => chrome.runtime.openOptionsPage();
 $('settings').onclick = (e) => {
   e.preventDefault();

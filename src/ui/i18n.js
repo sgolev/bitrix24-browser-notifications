@@ -7,3 +7,13 @@ export function localize(root = document) {
   for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   for (const el of root.querySelectorAll('[data-i18n-placeholder]')) el.placeholder = t(el.dataset.i18nPlaceholder);
 }
+
+// displayState() (src/lib/status.js) → [dot class, message key].
+export const STATE_UI = {
+  online: ['ok', 'popupStateOnline'],
+  polling: ['off', 'popupStatePolling'],
+  connecting: ['off', 'popupStateConnecting'],
+  login: ['warn', 'popupStateLogin'],
+  permission: ['warn', 'popupStatePermission'],
+  error: ['warn', 'popupStateError'],
+};

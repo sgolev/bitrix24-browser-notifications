@@ -1,10 +1,14 @@
-body { width: 300px; padding: 14px; }
+body { width: 320px; padding: 14px; }
 header { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
 .title { font-weight: 600; }
 .small { font-size: 12px; }
-.status { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
-.info { margin-bottom: 12px; display: grid; gap: 4px; }
-.unread b { font-size: 15px; }
+#portals { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+.portal { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; }
+.line { display: flex; gap: 8px; align-items: center; }
+.host { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.unread { background: var(--danger); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 12px; font-weight: 600; }
 .actions { display: grid; gap: 8px; }
 footer { margin-top: 12px; text-align: right; font-size: 12px; }
 footer a { color: var(--accent); text-decoration: none; }
+.open { padding: 2px 10px; font-size: 12.5px; flex: none; }
+.state { padding-left: 16px; }
