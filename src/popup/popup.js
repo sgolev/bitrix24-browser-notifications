@@ -1,6 +1,6 @@
-import { localize, t, STATE_UI } from '../src/ui/i18n.js';
-import { setSettings } from '../src/lib/settings.js';
-import { displayState } from '../src/lib/status.js';
+import { localize, t, STATE_UI } from '../ui/i18n.js';
+import { setSettings } from '../lib/settings.js';
+import { displayState } from '../lib/status.js';
 
 const $ = (id) => document.getElementById(id);
 

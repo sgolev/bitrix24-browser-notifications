@@ -1,6 +1,6 @@
 # Privacy Policy — Bitrix24 Notifications
 
-Last updated: October 14, 2026
+Last updated: October 15, 2026
 
 Bitrix24 Notifications ("the extension") shows desktop notifications for Bitrix24 chat messages, notifications and calls. This policy explains what data the extension handles and how.
 
@@ -21,9 +21,9 @@ This data is used only to show, update and clear notifications, and to display t
 
 ## Data stored on your device
 
-- **Settings** (portal addresses and notification preferences) are stored with `chrome.storage.sync`. If you have Chrome sync turned on, your browser syncs them to your other devices through your Google account.
-- **For each chat, the ID of the last message already notified** is stored with `chrome.storage.local`, so you are never notified twice about the same message.
-- **Connection status, unread counts and the session token** are kept in `chrome.storage.session`, which is cleared when the browser closes.
+- **Settings** (portal addresses and notification preferences) are stored with the browser's `storage.sync`. If you have browser sync turned on, your browser syncs them to your other devices through your Google account (Chrome) or Mozilla account (Firefox).
+- **For each chat, the ID of the last message already notified** is stored with `storage.local`, so you are never notified twice about the same message.
+- **Connection status, unread counts and the session token** are kept in `storage.session`, which is cleared when the browser closes.
 
 Removing a portal in the settings deletes all data stored for it and gives up the extension's access to that site. Uninstalling the extension deletes all of its data.
 
@@ -40,7 +40,7 @@ Your use of Bitrix24 itself is covered by the Bitrix24 privacy policy and your c
 
 The extension does not sell, transfer or share user data with anyone. It does not use or transfer user data for purposes unrelated to its single purpose, and it does not use user data to determine creditworthiness or for lending purposes.
 
-The use of information received from Chrome APIs complies with the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/), including the Limited Use requirements.
+The use of information received from Chrome APIs complies with the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/), including the Limited Use requirements. The Firefox version follows the [Firefox Add-on Policies](https://extensionworkshop.com/documentation/publish/add-on-policies/).
 
 ## Changes
 

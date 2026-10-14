@@ -1,11 +1,12 @@
 // chrome.notifications wrapper. Keeps a registry of what each visible
 // notification refers to (in storage.session) so clicks and buttons still work
-// after the service worker has been restarted.
+// after the background has been restarted.
 
 import { absoluteUrl } from './format.js';
 import { fetchImageDataUrl } from './portal.js';
+import { notificationOptions } from './platform.js';
 
-// Absolute: relative icon paths would resolve against src/ (the worker's location).
+// Absolute: a relative icon path would resolve against the calling script's location.
 const DEFAULT_ICON = chrome.runtime.getURL('icons/icon128.png');
 const avatarCache = new Map();
 
@@ -40,7 +41,7 @@ export async function lookup(id) {
 }
 
 export async function show(id, entry, options) {
-  const opts = { type: 'basic', iconUrl: DEFAULT_ICON, ...options };
+  const opts = notificationOptions({ type: 'basic', iconUrl: DEFAULT_ICON, ...options });
   try {
     await chrome.notifications.create(id, opts);
   } catch (e) {

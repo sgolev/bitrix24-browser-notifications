@@ -2,11 +2,19 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Package extension (ZIP)",
+      "label": "Build (Chromium + Firefox)",
       "type": "shell",
-      "command": "version=$(sed -n 's/.*\"version\": *\"\\([^\"]*\\)\".*/\\1/p' manifest.json | head -n1) && mkdir -p dist && out=\"dist/bitrix24-browser-notifications-$version.zip\" && rm -f \"$out\" && zip -r -X \"$out\" manifest.json _locales icons offscreen options popup src -x '*.DS_Store' && echo \"Created $out\"",
+      "command": "python3 scripts/build.py",
       "options": { "cwd": "${workspaceFolder}" },
       "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Package for stores",
+      "type": "shell",
+      "command": "python3 scripts/build.py --package",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
       "problemMatcher": []
     }
   ]

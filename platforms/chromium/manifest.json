@@ -8,7 +8,7 @@
   "permissions": ["notifications", "alarms", "storage", "offscreen", "scripting"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": {
-    "service_worker": "src/background.js",
+    "service_worker": "background.js",
     "type": "module"
   },
   "action": {

@@ -1,10 +1,10 @@
-// Service worker: owns per-portal session state, turns Push&Pull events and
-// polling results into desktop notifications, keeps the badge up to date and
-// handles clicks. Any number of portals can be configured; notification
-// settings are shared.
+// Background (Chromium service worker / Firefox event page): owns per-portal
+// session state, turns Push&Pull events and polling results into desktop
+// notifications, keeps the badge up to date and handles clicks. Any number of
+// portals can be configured; notification settings are shared.
 //
-// The WebSockets live in the offscreen document (offscreen/offscreen.js), which
-// wakes this worker with a runtime message for every batch of events.
+// The WebSockets live in a pull host (lib/pull-host.js): an offscreen document on
+// Chromium, the background page itself on Firefox.
 
 import { getSettings, originPattern, portalForUrl } from './lib/settings.js';
 import { callRest, sessidKey, AuthError } from './lib/portal.js';
@@ -12,6 +12,7 @@ import { interpret } from './lib/events.js';
 import { recentToActions, notificationsToActions, totalUnread } from './lib/poller.js';
 import { DEFAULT_STATE, summarize } from './lib/status.js';
 import * as notifier from './lib/notifier.js';
+import { createPullHost } from './lib/pull-host.js';
 
 const TICK_ALARM = 'tick';
 const SAFETY_POLL_MS = 5 * 60 * 1000; // catch-up even while real-time is up
@@ -77,50 +78,21 @@ function saveCursor(origin, cursor) {
   return chrome.storage.local.set({ [cursorStoreKey(origin)]: cursor });
 }
 
-// ------------------------------------------------------------------ offscreen
+// ----------------------------------------------------------------- pull host
 
-let creatingOffscreen = null;
-
-async function hasOffscreen() {
-  return (await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length > 0;
-}
-
-async function ensureOffscreen() {
-  if (await hasOffscreen()) return;
-  creatingOffscreen ??= chrome.offscreen
-    .createDocument({
-      url: 'offscreen/offscreen.html',
-      reasons: ['WORKERS'],
-      justification: 'Keeps the Bitrix24 real-time (Push&Pull) WebSocket connections open.',
-    })
-    .finally(() => (creatingOffscreen = null));
-  await creatingOffscreen;
-}
-
-// Returns the offscreen info map { [origin]: { state, … } } or null.
-async function toOffscreen(cmd, extra = {}) {
-  await ensureOffscreen();
-  try {
-    return await chrome.runtime.sendMessage({ target: 'offscreen', cmd, ...extra });
-  } catch {
-    return null;
-  }
-}
+const pullHost = createPullHost();
 
 async function startPull(origin, fresh = false) {
   try {
     const config = await callRest(origin, 'pull.config.get', fresh ? { CACHE: 'N' } : {});
-    await toOffscreen('start', { origin, config });
+    await pullHost.start(origin, config);
   } catch (e) {
     await handleError(origin, e);
   }
 }
 
-// Closes the portal's socket; closes the offscreen document once no socket is left.
 async function stopPull(origin) {
-  if (!(await hasOffscreen())) return;
-  const info = await chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'stop', origin }).catch(() => null);
-  if (!info || !Object.keys(info).length) await chrome.offscreen.closeDocument().catch(() => {});
+  await pullHost.stop(origin);
 }
 
 // --------------------------------------------------------------- lifecycle
@@ -148,7 +120,7 @@ async function init(origin, reason) {
     const me = { id: Number(user.id), name: user.name, avatar: user.avatar };
     await setState(origin, { auth: 'ok', error: '', me });
     await ensureBaseline(origin, me);
-    const info = await toOffscreen('info');
+    const info = await pullHost.info();
     const pull = info?.[origin];
     if (!pull || pull.state === 'idle' || reason === 'added') await startPull(origin);
     await refreshCounters(origin);
@@ -162,7 +134,7 @@ async function initAll(reason) {
   if (portals.length) await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 });
   else await chrome.alarms.clear(TICK_ALARM);
   for (const origin of portals) await init(origin, reason);
-  if (!portals.length && (await hasOffscreen())) await chrome.offscreen.closeDocument().catch(() => {});
+  if (!portals.length) await pullHost.closeAll();
   await renderBadge();
 }
 
@@ -420,7 +392,7 @@ async function onPullState(origin, state, detail) {
 async function tick() {
   const { portals } = await getSettings();
   const states = await getAllStates(portals);
-  const info = states.some((st) => st.auth === 'ok') ? await toOffscreen('info') : null;
+  const info = states.some((st) => st.auth === 'ok') ? await pullHost.info() : null;
   for (const st of states) {
     const { origin } = st;
     if (st.auth !== 'ok') {
@@ -553,6 +525,17 @@ chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
   });
 });
 
+// Socket events from the pull host (offscreen document or this page).
+pullHost.onMessage((msg) =>
+  enqueue(async () => {
+    // A socket for a portal that has since been removed: shut it down.
+    if (!(await getSettings()).portals.includes(msg.origin)) return stopPull(msg.origin);
+    if (msg.cmd === 'pull-events') await onPullEvents(msg.origin, msg.events);
+    else if (msg.cmd === 'pull-state') await onPullState(msg.origin, msg.state, msg.detail);
+    else await startPull(msg.origin, true);
+  }),
+);
+
 async function stateForUi() {
   const settings = await getSettings();
   return { settings, portals: await getAllStates(settings.portals) };
@@ -561,17 +544,6 @@ async function stateForUi() {
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.target !== 'background') return;
   switch (msg.cmd) {
-    case 'pull-events':
-    case 'pull-state':
-    case 'pull-need-config':
-      enqueue(async () => {
-        // A socket for a portal that has since been removed: shut it down.
-        if (!(await getSettings()).portals.includes(msg.origin)) return stopPull(msg.origin);
-        if (msg.cmd === 'pull-events') await onPullEvents(msg.origin, msg.events);
-        else if (msg.cmd === 'pull-state') await onPullState(msg.origin, msg.state, msg.detail);
-        else await startPull(msg.origin, true);
-      });
-      return;
     case 'get-state':
       enqueue(async () => reply(await stateForUi()));
       return true;
@@ -598,7 +570,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   }
 });
 
-// Debug handle for the service worker DevTools console (also used by E2E scripts).
+// Debug handle for the background DevTools console (also used by E2E scripts).
 globalThis.b24n = {
   init: (origin) => enqueue(() => (origin ? init(origin, 'debug') : initAll('debug'))),
   tick: () => enqueue(tick),

@@ -2,13 +2,14 @@
 // the result is shown on the page and in document.title ("PASS n" / "FAIL n").
 // Fixtures are trimmed copies of real payloads (see docs/protocol.md).
 
-import { toPlainText, truncate, extractUrl, absoluteUrl } from '../src/lib/format.js';
-import { interpret } from '../src/lib/events.js';
-import { buildUrl, parseFrame, backoffDelay, configExpiry, PullClient, State } from '../src/lib/pull.js';
-import { recentToActions, notificationsToActions, totalUnread } from '../src/lib/poller.js';
-import { normalizePortalUrl, migrate, addPortal, portalForUrl } from '../src/lib/settings.js';
-import { displayState, summarize } from '../src/lib/status.js';
-import { notifId, parseNotifId, entryFromId } from '../src/lib/notifier.js';
+import { toPlainText, truncate, extractUrl, absoluteUrl } from '../lib/format.js';
+import { interpret } from '../lib/events.js';
+import { buildUrl, parseFrame, backoffDelay, configExpiry, PullClient, State } from '../lib/pull.js';
+import { recentToActions, notificationsToActions, totalUnread } from '../lib/poller.js';
+import { normalizePortalUrl, migrate, addPortal, portalForUrl } from '../lib/settings.js';
+import { displayState, summarize } from '../lib/status.js';
+import { notifId, parseNotifId, entryFromId } from '../lib/notifier.js';
+import { toFirefoxOptions } from '../lib/platform.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -184,6 +185,22 @@ test('notification ids carry the portal origin', () => {
   eq(notifId('https://a.bitrix24.ru', 'chat:chat30'), 'https://a.bitrix24.ru|chat:chat30');
   eq(parseNotifId('https://a.bitrix24.ru|chat:chat30'), { origin: 'https://a.bitrix24.ru', local: 'chat:chat30' });
   eq(parseNotifId('test'), { origin: '', local: 'test' });
+});
+
+test('toFirefoxOptions keeps supported keys and folds the portal line into the message', () => {
+  const opts = {
+    type: 'basic',
+    title: 'Ann',
+    message: 'Hi',
+    iconUrl: 'data:x',
+    contextMessage: 'a.bitrix24.ru',
+    buttons: [{ title: 'Mark as read' }],
+    requireInteraction: true,
+    silent: false,
+    priority: 2,
+  };
+  eq(toFirefoxOptions(opts), { type: 'basic', title: 'Ann', message: 'Hi\na.bitrix24.ru', iconUrl: 'data:x' });
+  eq(toFirefoxOptions({ type: 'basic', title: 'T', message: 'M' }), { type: 'basic', title: 'T', message: 'M' });
 });
 
 test('entryFromId rebuilds registry entries for orphaned notifications', () => {
