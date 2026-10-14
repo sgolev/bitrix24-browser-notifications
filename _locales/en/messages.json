@@ -41,6 +41,8 @@
   "popupSettings": { "message": "Settings" },
 
   "optTitle": { "message": "Bitrix24 Notifications — Settings" },
+  "optWelcomeTitle": { "message": "Welcome!" },
+  "optWelcome": { "message": "Enter the address of your Bitrix24 below to start receiving notifications." },
   "optPortal": { "message": "Portal" },
   "optPortalHint": { "message": "Address of your Bitrix24, e.g. https://yourcompany.bitrix24.ru. Log in there in this browser as usual; the extension uses that login." },
   "optSave": { "message": "Save" },

@@ -19,3 +19,5 @@ label input { margin-top: 3px; }
 .status { display: flex; gap: 8px; align-items: center; margin-bottom: 0; }
 #portal-msg:empty { display: none; }
 #portal-msg.error { color: var(--danger); }
+.welcome { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.welcome p { margin: 0; }

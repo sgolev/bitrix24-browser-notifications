@@ -16,7 +16,7 @@ There is no separate login. The extension uses your normal portal session in the
 
 1. Open `chrome://extensions` and turn on **Developer mode**.
 2. Click **Load unpacked** and select this folder (the one containing `manifest.json`).
-3. The settings page opens from the extension menu (**Options**). Enter your portal address (e.g. `https://yourcompany.bitrix24.ru`), click **Save**, then allow access to that site when the browser asks.
+3. The settings page opens automatically after installing. You can also open it later from the extension menu (**Options**). Enter your portal address (e.g. `https://yourcompany.bitrix24.ru`), click **Save**, then allow access to that site when the browser asks.
 4. Log in to the portal in this browser if you have not already. The badge turns into an unread counter, and the popup shows **Connected, real-time**.
 
 ## How it works

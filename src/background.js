@@ -472,7 +472,11 @@ async function onButtonClicked(id, index) {
 
 // --------------------------------------------------------------- listeners
 
-chrome.runtime.onInstalled.addListener(() => enqueue(() => init('installed')));
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  // First install: the extension does nothing until a portal is entered, so say so.
+  if (reason === 'install') chrome.runtime.openOptionsPage();
+  enqueue(() => init('installed'));
+});
 chrome.runtime.onStartup.addListener(() => enqueue(() => init('startup')));
 
 chrome.alarms.onAlarm.addListener((alarm) => {

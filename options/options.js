@@ -18,7 +18,8 @@ function message(text, isError = false) {
 }
 
 async function renderStatus() {
-  const { status } = await chrome.runtime.sendMessage({ target: 'background', cmd: 'get-state' });
+  const { status, settings } = await chrome.runtime.sendMessage({ target: 'background', cmd: 'get-state' });
+  $('welcome').hidden = !!settings.portalUrl;
   const key = status.auth === 'ok' ? (status.pull === 'online' ? 'online' : 'polling') : status.auth;
   const [dot, label] = STATES[key] || STATES.error;
   $('dot').className = `dot ${dot}`;
@@ -28,6 +29,8 @@ async function renderStatus() {
 localize();
 const settings = await getSettings();
 $('portal').value = settings.portalUrl;
+// Right after install: point the user at the one thing they have to do.
+if (!settings.portalUrl) $('portal').focus();
 for (const box of document.querySelectorAll('input[data-key]')) {
   box.checked = !!settings[box.dataset.key];
   box.onchange = () => setSettings({ [box.dataset.key]: box.checked });

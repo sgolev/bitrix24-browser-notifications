@@ -41,6 +41,8 @@
   "popupSettings": { "message": "Настройки" },
 
   "optTitle": { "message": "Уведомления Битрикс24 — настройки" },
+  "optWelcomeTitle": { "message": "Добро пожаловать!" },
+  "optWelcome": { "message": "Укажите ниже адрес вашего Битрикс24, чтобы получать уведомления." },
   "optPortal": { "message": "Портал" },
   "optPortalHint": { "message": "Адрес вашего Битрикс24, например https://yourcompany.bitrix24.ru. Войдите на портал в этом браузере как обычно — расширение использует этот вход." },
   "optSave": { "message": "Сохранить" },
