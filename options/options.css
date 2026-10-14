@@ -1,0 +1,21 @@
+main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { display: flex; gap: 12px; align-items: center; font-size: 22px; margin: 0 0 20px; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+section { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+label { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; }
+label input { margin-top: 3px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+#portal {
+  flex: 1 1 260px;
+  min-width: 0;
+  font: inherit;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+}
+.small { font-size: 12.5px; }
+.status { display: flex; gap: 8px; align-items: center; margin-bottom: 0; }
+#portal-msg:empty { display: none; }
+#portal-msg.error { color: var(--danger); }

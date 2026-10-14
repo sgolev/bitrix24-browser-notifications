@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="optTitle"></title>
+<link rel="stylesheet" href="../src/ui/common.css">
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+<main>
+  <h1><img src="../icons/icon48.png" alt="" width="32" height="32"> <span data-i18n="extName"></span></h1>
+
+  <section>
+    <h2 data-i18n="optPortal"></h2>
+    <form id="portal-form" class="row">
+      <input id="portal" type="text" inputmode="url" autocomplete="url" placeholder="https://yourcompany.bitrix24.ru" spellcheck="false">
+      <button class="primary" type="submit" data-i18n="optSave"></button>
+    </form>
+    <p class="muted small" data-i18n="optPortalHint"></p>
+    <p class="small" id="portal-msg" role="status"></p>
+    <p class="status small"><span class="dot" id="dot"></span> <span id="state"></span></p>
+  </section>
+
+  <section>
+    <h2 data-i18n="optNotify"></h2>
+    <label><input type="checkbox" data-key="notifyPrivate"> <span data-i18n="optPrivate"></span></label>
+    <label><input type="checkbox" data-key="notifyGroup"> <span data-i18n="optGroup"></span></label>
+    <label><input type="checkbox" data-key="notifySystem"> <span data-i18n="optSystem"></span></label>
+    <label><input type="checkbox" data-key="notifyCalls"> <span data-i18n="optCalls"></span></label>
+    <label><input type="checkbox" data-key="notifyMissedCalls"> <span data-i18n="optMissedCalls"></span></label>
+  </section>
+
+  <section>
+    <h2 data-i18n="optBehaviour"></h2>
+    <label><input type="checkbox" data-key="showText"> <span data-i18n="optShowText"></span></label>
+    <label><input type="checkbox" data-key="suppressWhenFocused"> <span data-i18n="optSuppress"></span></label>
+    <label><input type="checkbox" data-key="silent"> <span data-i18n="optSilent"></span></label>
+    <p><button type="button" id="test" data-i18n="optTest"></button></p>
+    <p class="muted small" data-i18n="optTip"></p>
+  </section>
+</main>
+<script type="module" src="options.js"></script>
+</body>
+</html>
