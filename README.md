@@ -1,4 +1,11 @@
-# Bitrix24 Notifications (Chromium and Firefox extension)
+# Bitrix24 Notifications
+
+| Browser | Install from |
+|---|---|
+| **Chrome, Edge, Yandex Browser, ...** | [Chrome Web Store](https://chromewebstore.google.com/detail/pgbofigepcnhbcfamacepfdgfknepakh) |
+| **Firefox** | [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/bitrix24-notifications/)
+
+## Description
 
 Native desktop notifications for Bitrix24 that work even when no portal tab is open:
 
