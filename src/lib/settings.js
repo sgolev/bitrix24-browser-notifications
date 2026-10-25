@@ -7,6 +7,7 @@ export const DEFAULTS = {
   notifySystem: true,
   notifyCalls: true,
   notifyMissedCalls: true,
+  notifyReactions: true,
   showText: true,
   suppressWhenFocused: true,
   silent: false,

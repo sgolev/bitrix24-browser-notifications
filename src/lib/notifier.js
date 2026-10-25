@@ -66,7 +66,7 @@ export async function forget(id) {
   await setRegistry(notifs);
 }
 
-const KINDS = { chat: 'chat', sys: 'system', call: 'call', missed: 'missed', summary: 'summary' };
+const KINDS = { chat: 'chat', sys: 'system', call: 'call', missed: 'missed', reaction: 'reaction', summary: 'summary' };
 
 // Registry entry rebuilt from the id alone, for notifications still on screen that
 // the registry no longer knows about (it is wiped when the extension is reloaded).
@@ -78,6 +78,11 @@ export function entryFromId(id) {
   if (kind === 'chat') Object.assign(entry, { dialogId: rest, lastId: 0 });
   if (kind === 'system') entry.notifyId = Number(rest);
   if (kind === 'call' || kind === 'missed') entry.callId = Number(rest);
+  if (kind === 'reaction') {
+    // "reaction:<dialogId>:<messageId>"
+    const i = rest.lastIndexOf(':');
+    Object.assign(entry, { dialogId: rest.slice(0, i), messageId: Number(rest.slice(i + 1)) });
+  }
   return entry;
 }
 

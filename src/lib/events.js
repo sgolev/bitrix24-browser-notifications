@@ -4,12 +4,14 @@
 // Action kinds:
 //   chat           { dialogId, messageId, title, body, avatar, group }
 //   system         { notifyId, title, body, link, avatar, silent }
-//   call           { callId, dialogId, title, video, avatar }
+//   call           { callId, dialogId, title, name, video, avatar, group, initiatorId }
+//   reaction       { dialogId, messageId, fromUserId, reaction }  (someone reacted to my message)
 //   missed-call    { callId, dialogId, title, avatar }
 //   dismiss-chat   { dialogId, lastId }
 //   dismiss-chats  {}
 //   dismiss-system { ids: [] }  (empty ids = all)
 //   dismiss-call   { callId }
+//   dismiss-reactions { dialogId }
 //   seen           { dialogId, messageId }  (advance the cursor without notifying)
 //   counters       {}           (unread counters changed)
 
@@ -26,6 +28,9 @@ const defaultT = (key, subs) => ({
 }[key] ?? key) + (subs ? ` ${[].concat(subs).join(' ')}` : '');
 
 const isMe = (id, myId) => id != null && String(id) === String(myId);
+
+// Message text mentions the user: [USER=18]Name[/USER] (also "[USER=18 REPLACE]").
+export const mentions = (text, myId) => myId != null && new RegExp(`\\[user=${myId}[\\] ]`, 'i').test(text || '');
 
 const isMuted = (muteList, myId) => {
   if (!muteList) return false;
@@ -48,7 +53,8 @@ function fromMessage(p, { myId, t }) {
     p.notify === false ||
     mp.NOTIFY === 'N' ||
     mp.COMPONENT_ID === 'CallMessage' ||
-    isMuted(chat?.mute_list, myId)
+    // Muted chats stay quiet, except for messages that mention the user (as in Bitrix24 itself).
+    (isMuted(chat?.mute_list, myId) && !mentions(m.text, myId))
   ) {
     return [{ kind: 'seen', dialogId, messageId: Number(m.id) }, { kind: 'counters' }];
   }
@@ -125,6 +131,14 @@ function fromIm(command, p, ctx) {
       return [{ kind: 'dismiss-chat', dialogId: String(p.dialogId), lastId: Infinity }];
     case 'readAllChats':
       return [{ kind: 'dismiss-chats' }, { kind: 'counters' }];
+    // An "anchor" is Bitrix24's marker for something addressed to the user. Type
+    // "reaction" goes only to the message's author; mentions arrive as messages.
+    case 'addAnchor':
+      return p.type === 'reaction' && p.fromUserId && !isMe(p.fromUserId, ctx.myId)
+        ? [{ kind: 'reaction', dialogId: String(p.dialogId), messageId: Number(p.messageId), fromUserId: Number(p.fromUserId), reaction: p.subType || '' }]
+        : [];
+    case 'deleteChatAnchors':
+      return [{ kind: 'dismiss-reactions', dialogId: String(p.dialogId) }];
     case 'unreadMessage':
     case 'unreadMessageChat':
     case 'messageDelete':
@@ -153,6 +167,9 @@ function fromCall(command, p, { myId, t }) {
           name: ae.name || '',
           video: !!p.video,
           avatar: ae.avatar || '',
+          // Group calls carry only the caller's id; the background looks up the name.
+          group: !isPrivate,
+          initiatorId: Number(call.initiatorId) || 0,
         },
       ];
     }

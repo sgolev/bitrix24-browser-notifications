@@ -239,6 +239,28 @@ async function notifySummary(origin, actions) {
   });
 }
 
+// Names and avatars of other users, for events that carry only a user id (group
+// calls, reactions). Cached per portal for the life of the background.
+const users = new Map();
+function userInfo(origin, id) {
+  const key = `${origin}|${id}`;
+  if (!users.has(key)) {
+    users.set(
+      key,
+      callRest(origin, 'im.user.get', { ID: id })
+        .then((u) => ({ name: u?.name || '', avatar: u?.avatar || '' }))
+        .catch(() => (users.delete(key), { name: '', avatar: '' })),
+    );
+  }
+  return users.get(key);
+}
+
+// A ringing call or a reaction should not wait long for a name lookup.
+const within = (promise, ms, fallback) => Promise.race([promise, new Promise((r) => setTimeout(() => r(fallback), ms))]);
+const NO_USER = { name: '', avatar: '' };
+
+const REACTION_EMOJI = { like: '👍', kiss: '😘', laugh: '😂', wonder: '😮', cry: '😢', angry: '😠', facepalm: '🤦' };
+
 const countersTimers = new Map();
 function scheduleCounters(origin) {
   clearTimeout(countersTimers.get(origin));
@@ -314,6 +336,7 @@ async function applyActions(origin, actions) {
         const id = notifId(origin, `chat:${a.dialogId}`);
         const prev = await notifier.lookup(id);
         if (prev && a.lastId >= prev.lastId) await notifier.clear(id);
+        await notifier.clearWhere((e) => mine('reaction')(e) && e.dialogId === a.dialogId);
         break;
       }
       case 'dismiss-chats':
@@ -338,18 +361,40 @@ async function applyActions(origin, actions) {
         if (a.ids.length) await Promise.all(a.ids.map((id) => notifier.clear(notifId(origin, `sys:${id}`))));
         else await notifier.clearWhere(mine('system'));
         break;
-      case 'call':
+      case 'call': {
         if (!s.notifyCalls || (await quiet())) break;
+        // Group calls: say who is calling, not just which chat.
+        const caller = a.group && a.initiatorId ? await within(userInfo(origin, a.initiatorId), 2000, NO_USER) : NO_USER;
         await notifier.show(notifId(origin, `call:${a.callId}`), { kind: 'call', origin, callId: a.callId, dialogId: a.dialogId }, {
           title: a.title,
-          message: a.name,
-          iconUrl: await notifier.iconFor(a.avatar, origin),
+          message: caller.name ? `${caller.name}\n${a.name}` : a.name,
+          iconUrl: await notifier.iconFor(caller.avatar || a.avatar, origin),
           buttons: [{ title: t('answer') }],
           requireInteraction: true,
           priority: 2,
           silent: s.silent,
           ...label,
         });
+        break;
+      }
+      case 'reaction': {
+        if (!s.notifyReactions || (await quiet())) break;
+        const who = await within(userInfo(origin, a.fromUserId), 2000, NO_USER);
+        await notifier.show(
+          notifId(origin, `reaction:${a.dialogId}:${a.messageId}`),
+          { kind: 'reaction', origin, dialogId: a.dialogId, messageId: a.messageId },
+          {
+            title: who.name || t('systemTitle'),
+            message: t('reactedToMessage', [REACTION_EMOJI[a.reaction] || a.reaction]),
+            iconUrl: await notifier.iconFor(who.avatar, origin),
+            silent: s.silent,
+            ...label,
+          },
+        );
+        break;
+      }
+      case 'dismiss-reactions':
+        await notifier.clearWhere((e) => mine('reaction')(e) && e.dialogId === a.dialogId);
         break;
       case 'dismiss-call':
         await notifier.clear(notifId(origin, `call:${a.callId}`));

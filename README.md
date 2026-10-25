@@ -9,9 +9,12 @@
 
 Native desktop notifications for Bitrix24 that work even when no portal tab is open:
 
-- **Chat messages** (private and group). One notification per dialog, updated with an unread count. A **Mark as read** button (Chromium).
-- **Bell notifications** (tasks, mentions, comments, …). Clicking one opens its link. A **Mark as read** button (Chromium).
-- **Incoming calls**. On Chromium the notification stays on screen while the call rings. It is replaced by a **missed call** notification if nobody answers.
+- **Chat messages:** private chats, group chats and channels. There is one notification per dialog, updated with an unread count, and a **Mark as read** button (Chromium).
+  - Not notified: your own messages, system messages ("X created the chat") and chats you muted in Bitrix24. In a muted chat, a message that **mentions you** is still notified.
+  - Task comments are not notified: Bitrix24 sends them as "don't notify" and only updates the task counter.
+- **Bell notifications:** everything Bitrix24 shows under the bell, from any module. Examples: task assignments, mentions and comments in the activity feed, reactions to your feed posts, calendar invitations. Clicking one opens its link, and there is a **Mark as read** button (Chromium). Invitations show their text only; accept or decline them in the portal.
+- **Reactions to your chat messages:** "<name>: Reacted 👍 to your message". It disappears when you read that chat.
+- **Incoming calls:** Bitrix24 audio and video calls, private and group. Group calls show who is calling and in which chat. On Chromium the notification stays on screen while the call rings. It is replaced by a **missed call** notification if nobody answers, and removed if you answer or decline elsewhere.
 - Notifications disappear when you read the message or answer the call somewhere else (portal tab, mobile app, desktop app).
 - The toolbar badge shows the unread count. `!` means you need to log in, `?` means the extension is not set up yet.
 - Clicking a chat notification opens that chat. If a portal tab is already open, it is reused without a reload.
@@ -118,6 +121,9 @@ The extension has no access to any other site. Removing a portal also gives up a
 - It relies on the portal's internal web APIs and the Push&Pull protocol, as observed on Bitrix24 cloud in October 2026. These are not public, documented APIs, and Bitrix24 updates could change them. `docs/protocol.md` lists exactly what is used.
 - It has only been tested with Bitrix24 cloud. Self-hosted ("box") installations may use a different pull server version.
 - Calls cannot be answered from the notification. **Answer** (Chromium) or a click opens the chat, and you answer in the portal.
+- Bitrix24 telephony (phone lines) is not covered, only Bitrix24's own audio and video calls.
+- After the real-time connection was down, the catch-up recovers chat messages and bell notifications (last 12 h), but not calls or reactions from that gap.
+- Open lines and chatbot messages are handled like other chats but haven't been tested.
 
 ## Development
 

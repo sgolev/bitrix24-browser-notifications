@@ -209,6 +209,7 @@ test('entryFromId rebuilds registry entries for orphaned notifications', () => {
   eq(entryFromId(`${o}|sys:21`), { origin: o, kind: 'system', shownAt: 0, notifyId: 21 });
   eq(entryFromId(`${o}|call:4`), { origin: o, kind: 'call', shownAt: 0, callId: 4 });
   eq(entryFromId(`${o}|summary`), { origin: o, kind: 'summary', shownAt: 0 });
+  eq(entryFromId(`${o}|reaction:chat58:312`), { origin: o, kind: 'reaction', shownAt: 0, dialogId: 'chat58', messageId: 312 });
 });
 
 test('displayState and badge summary across portals', () => {
@@ -256,7 +257,10 @@ test('system / NOTIFY=N / call / muted messages are only marked seen', () => {
     (m) => (m.params.message.system = 'Y'),
     (m) => (m.params.message.params = { NOTIFY: 'N' }),
     (m) => (m.params.message.params = { COMPONENT_ID: 'CallMessage', NOTIFY: 'Y' }),
-    (m) => (m.params.chat[30].mute_list[ME] = true),
+    (m) => {
+      m.params.chat[30].mute_list[ME] = true;
+      m.params.message.text = 'no mention here'; // a mention would still notify (tested below)
+    },
     (m) => (m.params.notify = false),
   ];
   for (const change of variants) {
@@ -264,6 +268,29 @@ test('system / NOTIFY=N / call / muted messages are only marked seen', () => {
     change(m);
     eq(interpret(m, { myId: ME }).map((a) => a.kind), ['seen', 'counters'], change.toString());
   }
+});
+
+test('muted chat: plain messages are only marked seen, mentions of the user still notify', () => {
+  const muted = structuredClone(groupMessage);
+  muted.params.chat[30].mute_list[ME] = true;
+  muted.params.message.text = 'just chatting';
+  eq(interpret(muted, { myId: ME })[0].kind, 'seen');
+  muted.params.message.text = '[USER=18]Wazgen Amosov[/USER] please look';
+  const [a] = interpret(muted, { myId: ME });
+  eq([a.kind, a.body], ['chat', 'Prokhor James: Wazgen Amosov please look']);
+  muted.params.message.text = '[USER=180]Someone else[/USER] hi';
+  eq(interpret(muted, { myId: ME })[0].kind, 'seen', 'a different user id that starts with 18 is not a mention');
+});
+
+test('reaction anchors → reaction action; read clears them', () => {
+  const anchor = (p) => ({ module_id: 'im', command: 'addAnchor', params: { chatId: 20, dialogId: 20, messageId: 294, fromUserId: 20, type: 'reaction', subType: 'like', ...p } });
+  eq(interpret(anchor({}), { myId: ME }), [{ kind: 'reaction', dialogId: '20', messageId: 294, fromUserId: 20, reaction: 'like' }]);
+  eq(interpret(anchor({ fromUserId: ME }), { myId: ME }), [], 'own reaction');
+  eq(interpret(anchor({ type: 'mention', subType: null }), { myId: ME }), [], 'mentions arrive as messages');
+  eq(interpret({ module_id: 'im', command: 'deleteChatAnchors', params: { dialogId: 'chat58', chatId: 58, userId: ME } }, { myId: ME }), [
+    { kind: 'dismiss-reactions', dialogId: 'chat58' },
+  ]);
+  eq(interpret({ module_id: 'im', command: 'addReaction', params: { userId: 20, reaction: 'like', dialogId: 20 } }, { myId: ME }), [], 'broadcast to all members; the anchor decides');
 });
 
 test('file-only message gets the file label', () => {
@@ -295,8 +322,38 @@ test('read events → dismiss actions', () => {
 
 test('incoming call → call action addressed to the caller dialog', () => {
   const [a] = interpret(callIncoming, { myId: ME });
-  eq(a, { kind: 'call', callId: 2, dialogId: '20', title: 'Incoming video call', name: 'Prokhor James', video: true, avatar: '/bitrix/js/im/images/blank.gif' });
+  eq(a, {
+    kind: 'call',
+    callId: 2,
+    dialogId: '20',
+    title: 'Incoming video call',
+    name: 'Prokhor James',
+    video: true,
+    avatar: '/bitrix/js/im/images/blank.gif',
+    group: false,
+    initiatorId: 20,
+  });
   eq(interpret(callIncoming, { myId: 20 }), [], 'own outgoing call is ignored');
+});
+
+test('group call → call action for the chat, with the caller id for the name lookup', () => {
+  const groupCall = {
+    module_id: 'call',
+    command: 'Call::incoming',
+    params: {
+      callId: 8,
+      video: true,
+      call: {
+        initiatorId: 20,
+        associatedEntity: { type: 'chat', id: 'chat58', chatId: 58, name: 'Ext test chat', avatar: '', advanced: { chatType: 'chat' } },
+      },
+    },
+  };
+  const [a] = interpret(groupCall, { myId: ME });
+  eq([a.dialogId, a.name, a.group, a.initiatorId], ['chat58', 'Ext test chat', true, 20]);
+  const audio = structuredClone(groupCall);
+  audio.params.video = false;
+  eq(interpret(audio, { myId: ME })[0].title, 'Incoming call');
 });
 
 test('call lifecycle → dismiss / missed', () => {

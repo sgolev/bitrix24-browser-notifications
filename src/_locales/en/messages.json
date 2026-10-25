@@ -181,5 +181,11 @@
   },
   "optPortalPlaceholder": {
     "message": "https://yourcompany.bitrix24.com"
+  },
+  "reactedToMessage": {
+    "message": "Reacted $1 to your message"
+  },
+  "optReactions": {
+    "message": "Reactions to my messages in chats"
   }
 }

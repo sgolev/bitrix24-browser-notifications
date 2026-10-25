@@ -13,7 +13,7 @@ This file records what the extension relies on. Everything here was observed on 
 
 | Method | Purpose |
 | --- | --- |
-| `im.user.get` | Current user (`id`, `name`, `avatar`). |
+| `im.user.get` | Current user (`id`, `name`, `avatar`). With `ID`, another user: used for group-call callers and reactions, whose events carry only a user id. |
 | `pull.config.get` (`CACHE: 'N'` to force a fresh one) | Push&Pull connection config. |
 | `im.counters.get` | `TYPE.{MESSENGER,CHAT,DIALOG,NOTIFY,LINES}` unread counters, used for the badge. |
 | `im.recent.list` (`LIMIT`) | Recent dialogs. Each item has `id` (dialogId), `title`, `counter` (unread), `message.{id,text,author_id,date,file}` and `chat.mute_list`. Used for the polling fallback. |
@@ -52,15 +52,24 @@ All of these are `text.module_id` / `text.command` pairs.
 | Event | Payload |
 | --- | --- |
 | `im` / `message` (private) and `im` / `messageChat` (group) | `params.dialogId` (the sender's user id for private chats, `chatNN` for groups), `params.chatId`, `params.message.{id,senderId,system,text (BBCode),params}`, `params.users{id:{name,avatar}}`, `params.chat{chatId:{name,mute_list{userId:bool},type}}`, `params.notify`. |
-| `im` / `notifyAdd` | `params.{id,text,title,link,silent,userName,userAvatar,originalTag,params.COMPONENT_PARAMS.{subject,plainText}}`. |
+| `im` / `notifyAdd` | `params.{id,type,text,title,link,silent,userName,userAvatar,originalTag,settingName,params.COMPONENT_PARAMS.{subject,plainText}}`. Every bell notification from any module arrives this way. Observed `settingName` values include `tasks\|manage`, `calendar\|invite`, and feed mentions, comments and likes. `type: 1` is an invitation with `params.BUTTONS[]` (`{TITLE, VALUE, TYPE: accept/cancel}`). |
 | `im` / `notifyRead` | `params.list` = notification ids. |
 | `im` / `readMessageChat` | Sent for private chats too. `params.{dialogId,chatId,lastId,counter}`. |
-| `call` / `Call::incoming` | `params.{callId,video,isRepeated,call.{initiatorId,associatedEntity.{id,chatId,name,avatar,advanced.chatType}}}`. |
+| `im` / `addAnchor` | `params.{dialogId,chatId,messageId,fromUserId,type,subType}`. Sent only to the user an item is addressed to. `type: "reaction"` (`subType`: `like`, …) means someone reacted to *your* message. `type: "mention"` comes together with the mentioning message. |
+| `im` / `deleteChatAnchors` | `params.{dialogId,chatId,userId}`. Sent when you read the dialog; clears its anchors (and the extension's reaction notifications). |
+| `im` / `addReaction`, `im` / `messageLike` | Reaction details, broadcast to all chat members (`addReaction.params.actualReactions.usersShort[].name`). Not used: `addAnchor` already tells who the reaction is for. |
+| `call` / `Call::incoming` | `params.{callId,video,isRepeated,call.{initiatorId,associatedEntity.{id,chatId,name,avatar,advanced.chatType}}}`. For a group call, `associatedEntity` is the chat (`advanced.chatType: "chat"`), and the caller is only `initiatorId`. `video: false` means an audio call. |
 | `call` / `Call::usersAnswered` | `params.{callId,senders[].senderId}`. |
+| `call` / `Call::hangup` | `params.{callId,senderId}`. With your `senderId`: you declined or left on another device. |
 | `call` / `Call::finish` | `params.callId`. |
-| `call` / `Call::callLogAdd` | `params.{status:"missed",type:"incoming",userId,sourceCallId,callData.{dialogId,title,avatar}}`. |
+| `call` / `Call::callLogAdd` | `params.{status,type:"incoming",userId,sourceCallId,callData.{dialogId,title,avatar}}`. `status` is `"missed"` (no answer) or `"declined"`. |
 
 Call-related messages also show up in the chat as `params.message.params.COMPONENT_ID == "CallMessage"`. These need to be ignored, because the call events above already cover them.
+
+Other message flags seen in practice:
+- **Task comments** arrive as `messageChat` in the task's chat (`chat.type: "tasksTask"`, `entity_type: "TASKS_TASK"`) with `message.params.NOTIFY = "N"`; Bitrix24 does not notify them. No `notifyAdd` is sent for them.
+- **Channels** (`chat.type: "channel"`) send ordinary `messageChat` events. The public `im.chat.add` ignores a channel type; channels are created with the portal's internal `im.v2.Chat.add` action (`fields.type: "CHANNEL"`).
+- **Muted chats** still get `params.notify: true`; the mute is only in `chat.mute_list[<your id>]`. A mention in a muted chat additionally sends `addAnchor` with `type: "mention"`.
 
 ## Opening things in an existing portal tab
 
