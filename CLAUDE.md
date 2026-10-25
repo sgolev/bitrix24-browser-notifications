@@ -9,7 +9,7 @@ Browser extension (Chromium + Firefox, MV3) that shows desktop notifications for
 - Browser differences live only in `src/lib/pull-host.js` (where sockets live) and `src/lib/platform.js` (notification options). Everything else is shared. Feature-detect; don't fork files.
 
 ## Architecture essentials
-- `src/background.js` orchestrates per portal. All state changes go through the `enqueue` queue.
+- `src/background.js` orchestrates per portal. Each portal has its own work queue (`enqueueFor(origin, fn)`, `lib/serial.js`), so a slow portal never delays the others; never await a portal's own queue from inside it. Shared state has short locks: the notification registry (`lib/notifier.js`) and the badge. UI pages read state from storage (`lib/state.js`), never through a queue.
   - **State keys:** session `portal:<origin>` and `sessid:<origin>`; local `cursor:<origin>`.
   - **Notification ids:** `<origin>|<kind>:<id>`.
 - Push&Pull WebSockets run in text mode, parsed in `lib/pull.js`.

@@ -14,6 +14,7 @@ import { DEFAULT_STATE, summarize } from './lib/status.js';
 import { stateKey, getState, getAllStates } from './lib/state.js';
 import * as notifier from './lib/notifier.js';
 import { createPullHost } from './lib/pull-host.js';
+import { createSerializer } from './lib/serial.js';
 
 const TICK_ALARM = 'tick';
 const SAFETY_POLL_MS = 5 * 60 * 1000; // catch-up even while real-time is up
@@ -25,9 +26,12 @@ const t = (key, subs) => chrome.i18n.getMessage(key, subs) || key;
 const host = (origin) => new URL(origin).host;
 const { notifId } = notifier;
 
-// All state-changing work runs through one queue so storage updates never interleave.
-let queue = Promise.resolve();
-const enqueue = (fn) => (queue = queue.then(fn).catch((e) => console.error('[b24n]', e)));
+// Work is queued per portal: a portal's state, sessid, cursor and socket are only
+// touched by its own queue, so one slow or unresponsive portal never delays
+// another portal's notifications. What portals share has its own lock: the
+// notification registry (lib/notifier.js) and the badge (below).
+const serialize = createSerializer();
+const enqueueFor = (origin, fn) => serialize(`portal ${origin}`, fn).catch((e) => console.error('[b24n]', origin, e));
 
 // ------------------------------------------------------- per-portal session state
 // storage.session "portal:<origin>" (see lib/state.js). Only the background writes it.
@@ -39,8 +43,10 @@ async function setState(origin, patch) {
   return next;
 }
 
+// Serialized, so an older summary never overwrites a newer one.
+const renderBadge = () => serialize('badge', drawBadge);
 
-async function renderBadge() {
+async function drawBadge() {
   const s = await getSettings();
   const { text, color, title } = summarize(await getAllStates(s.portals), { t, muted: s.muteUntil > Date.now() });
   await Promise.all([
@@ -119,12 +125,13 @@ async function init(origin, reason) {
   }
 }
 
+// Starts every portal in its own queue, in parallel.
 async function initAll(reason) {
   const { portals } = await getSettings();
   if (portals.length) await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 });
   else await chrome.alarms.clear(TICK_ALARM);
-  for (const origin of portals) await init(origin, reason);
   if (!portals.length) await pullHost.closeAll();
+  await Promise.all(portals.map((origin) => enqueueFor(origin, () => init(origin, reason))));
   await renderBadge();
 }
 
@@ -254,7 +261,7 @@ const REACTION_EMOJI = { like: '👍', kiss: '😘', laugh: '😂', wonder: '�
 const countersTimers = new Map();
 function scheduleCounters(origin) {
   clearTimeout(countersTimers.get(origin));
-  countersTimers.set(origin, setTimeout(() => enqueue(() => refreshCounters(origin)), 1000));
+  countersTimers.set(origin, setTimeout(() => enqueueFor(origin, () => refreshCounters(origin)), 1000));
 }
 
 async function refreshCounters(origin) {
@@ -424,23 +431,31 @@ async function onPullState(origin, state, detail) {
   if (detail?.code) console.info('[b24n] pull', origin, state, detail);
 }
 
+// The 1-minute watchdog. Each portal is checked in its own queue; a portal whose
+// previous check is still running (e.g. it doesn't respond) is skipped this round.
+const ticking = new Set();
 async function tick() {
+  await notifier.clearWhere((e) => e.kind === 'call' && Date.now() - e.shownAt > CALL_RING_MAX_MS);
+  await notifier.prune();
   const { portals } = await getSettings();
   const states = await getAllStates(portals);
   const info = states.some((st) => st.auth === 'ok') ? await pullHost.info() : null;
-  for (const st of states) {
-    const { origin } = st;
-    if (st.auth !== 'ok') {
-      await init(origin, 'tick');
-      continue;
-    }
-    const pull = info?.[origin];
-    if (!pull || pull.state === 'idle') await startPull(origin);
-    else if (pull.state !== st.pull) await setState(origin, { pull: pull.state });
-    if (pull?.state !== 'online' || Date.now() - st.lastPollAt > SAFETY_POLL_MS) await catchUp(origin);
-  }
-  await notifier.clearWhere((e) => e.kind === 'call' && Date.now() - e.shownAt > CALL_RING_MAX_MS);
-  await notifier.prune();
+  await Promise.all(
+    portals
+      .filter((origin) => !ticking.has(origin))
+      .map((origin) => {
+        ticking.add(origin);
+        return enqueueFor(origin, () => tickPortal(origin, info?.[origin])).finally(() => ticking.delete(origin));
+      }),
+  );
+}
+
+async function tickPortal(origin, pull) {
+  const st = await getState(origin);
+  if (st.auth !== 'ok') return init(origin, 'tick');
+  if (!pull || pull.state === 'idle') await startPull(origin);
+  else if (pull.state !== st.pull) await setState(origin, { pull: pull.state });
+  if (pull?.state !== 'online' || Date.now() - st.lastPollAt > SAFETY_POLL_MS) await catchUp(origin);
 }
 
 // ------------------------------------------------------------------ clicks
@@ -511,58 +526,71 @@ async function onButtonClicked(id, index) {
 
 // --------------------------------------------------------------- listeners
 
+const logError = (e) => console.error('[b24n]', e);
+
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   // First install: the extension does nothing until a portal is entered, so say so.
   if (reason === 'install') chrome.runtime.openOptionsPage();
-  enqueue(async () => {
+  (async () => {
     if (reason === 'update') await migrateStorage();
     await initAll('installed');
-  });
+  })().catch(logError);
 });
-chrome.runtime.onStartup.addListener(() => enqueue(() => initAll('startup')));
+chrome.runtime.onStartup.addListener(() => initAll('startup').catch(logError));
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === TICK_ALARM) enqueue(tick);
+  if (alarm.name === TICK_ALARM) tick().catch(logError);
 });
 
-chrome.notifications.onClicked.addListener((id) => enqueue(() => onClicked(id)));
-chrome.notifications.onButtonClicked.addListener((id, index) => enqueue(() => onButtonClicked(id, index)));
-chrome.notifications.onClosed.addListener((id) => enqueue(() => notifier.forget(id)));
+// Clicks run in the queue of the notification's portal.
+const portalOf = (id) => notifier.parseNotifId(id).origin;
+chrome.notifications.onClicked.addListener((id) => enqueueFor(portalOf(id), () => onClicked(id)));
+chrome.notifications.onButtonClicked.addListener((id, index) => enqueueFor(portalOf(id), () => onButtonClicked(id, index)));
+chrome.notifications.onClosed.addListener((id) => notifier.forget(id).catch(logError));
 
-chrome.permissions.onAdded.addListener(() => enqueue(() => initAll('permission')));
-chrome.permissions.onRemoved.addListener(() => enqueue(() => initAll('permission')));
+chrome.permissions.onAdded.addListener(() => initAll('permission').catch(logError));
+chrome.permissions.onRemoved.addListener(() => initAll('permission').catch(logError));
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync') return;
   if (changes.portals) {
     const before = changes.portals.oldValue || [];
     const after = changes.portals.newValue || [];
-    enqueue(async () => {
-      for (const origin of before.filter((o) => !after.includes(o))) await forgetPortal(origin);
-      for (const origin of after.filter((o) => !before.includes(o))) {
-        if ((await getState(origin)).auth !== 'ok') await init(origin, 'added');
-      }
+    (async () => {
+      await Promise.all([
+        ...before.filter((o) => !after.includes(o)).map((origin) => enqueueFor(origin, () => forgetPortal(origin))),
+        ...after
+          .filter((o) => !before.includes(o))
+          .map((origin) =>
+            enqueueFor(origin, async () => {
+              if ((await getState(origin)).auth !== 'ok') await init(origin, 'added');
+            }),
+          ),
+      ]);
       if (after.length) await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 });
       else await chrome.alarms.clear(TICK_ALARM);
       await renderBadge();
-    });
+    })().catch(logError);
   } else if (changes.muteUntil) {
-    enqueue(renderBadge);
+    renderBadge().catch(logError);
   }
 });
 
 // A portal page finished loading while we were logged out: the user probably just logged in.
 chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
   if (change.status !== 'complete' || !tab.url) return;
-  enqueue(async () => {
-    const origin = portalForUrl((await getSettings()).portals, tab.url);
-    if (origin && (await getState(origin)).auth !== 'ok') await init(origin, 'portal-tab');
+  getSettings().then(({ portals }) => {
+    const origin = portalForUrl(portals, tab.url);
+    if (!origin) return;
+    enqueueFor(origin, async () => {
+      if ((await getState(origin)).auth !== 'ok') await init(origin, 'portal-tab');
+    });
   });
 });
 
 // Socket events from the pull host (offscreen document or this page).
 pullHost.onMessage((msg) =>
-  enqueue(async () => {
+  enqueueFor(msg.origin, async () => {
     // A socket for a portal that has since been removed: shut it down.
     if (!(await getSettings()).portals.includes(msg.origin)) return stopPull(msg.origin);
     if (msg.cmd === 'pull-events') await onPullEvents(msg.origin, msg.events);
@@ -585,7 +613,7 @@ async function refreshStale(origin) {
   for (const st of await getAllStates(origin ? [origin] : portals)) {
     if (st.auth === 'ok' || refreshing.has(st.origin)) continue;
     refreshing.add(st.origin);
-    enqueue(() => init(st.origin, 'refresh')).finally(() => refreshing.delete(st.origin));
+    enqueueFor(st.origin, () => init(st.origin, 'refresh')).finally(() => refreshing.delete(st.origin));
   }
 }
 
@@ -606,13 +634,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       openTarget({ kind: 'portal', origin: msg.origin }).catch((e) => console.error('[b24n]', e));
       return;
     case 'test-notification':
-      enqueue(async () => {
-        await notifier.show('test', { kind: 'test' }, {
-          title: t('testTitle'),
-          message: t('testBody'),
-          silent: (await getSettings()).silent,
-        });
-      });
+      getSettings()
+        .then((s) => notifier.show('test', { kind: 'test' }, { title: t('testTitle'), message: t('testBody'), silent: s.silent }))
+        .catch(logError);
       return;
     default:
   }
@@ -620,9 +644,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
 
 // Debug handle for the background DevTools console (also used by E2E scripts).
 globalThis.b24n = {
-  init: (origin) => enqueue(() => (origin ? init(origin, 'debug') : initAll('debug'))),
-  tick: () => enqueue(tick),
-  catchUp: (origin) => enqueue(() => catchUp(origin)),
-  click: (id) => enqueue(() => onClicked(id)),
-  button: (id, index = 0) => enqueue(() => onButtonClicked(id, index)),
+  init: (origin) => (origin ? enqueueFor(origin, () => init(origin, 'debug')) : initAll('debug')),
+  tick,
+  catchUp: (origin) => enqueueFor(origin, () => catchUp(origin)),
+  click: (id) => enqueueFor(portalOf(id), () => onClicked(id)),
+  button: (id, index = 0) => enqueueFor(portalOf(id), () => onButtonClicked(id, index)),
 };

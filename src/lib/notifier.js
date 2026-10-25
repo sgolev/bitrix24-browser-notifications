@@ -5,6 +5,7 @@
 import { absoluteUrl } from './format.js';
 import { fetchImageDataUrl } from './portal.js';
 import { notificationOptions } from './platform.js';
+import { createSerializer } from './serial.js';
 
 // Absolute: a relative icon path would resolve against the calling script's location.
 const DEFAULT_ICON = chrome.runtime.getURL('icons/icon128.png');
@@ -33,6 +34,11 @@ function setRegistry(notifs) {
   return chrome.storage.session.set({ notifs });
 }
 
+// The registry is shared by all portals, whose work runs in parallel, so every
+// read-modify-write of it goes through this lock. Nothing inside does network I/O.
+const serialize = createSerializer();
+const withRegistry = (fn) => serialize('registry', fn);
+
 // Registry entry for a notification, or one rebuilt from its id if it is still displayed.
 export async function lookup(id) {
   const entry = (await getRegistry())[id];
@@ -49,9 +55,11 @@ export async function show(id, entry, options) {
     if (opts.iconUrl === DEFAULT_ICON) throw e;
     await chrome.notifications.create(id, { ...opts, iconUrl: DEFAULT_ICON });
   }
-  const notifs = await getRegistry();
-  notifs[id] = { ...entry, shownAt: Date.now() };
-  await setRegistry(notifs);
+  await withRegistry(async () => {
+    const notifs = await getRegistry();
+    notifs[id] = { ...entry, shownAt: Date.now() };
+    await setRegistry(notifs);
+  });
 }
 
 export async function clear(id) {
@@ -59,11 +67,13 @@ export async function clear(id) {
   await forget(id);
 }
 
-export async function forget(id) {
-  const notifs = await getRegistry();
-  if (!(id in notifs)) return;
-  delete notifs[id];
-  await setRegistry(notifs);
+export function forget(id) {
+  return withRegistry(async () => {
+    const notifs = await getRegistry();
+    if (!(id in notifs)) return;
+    delete notifs[id];
+    await setRegistry(notifs);
+  });
 }
 
 const KINDS = { chat: 'chat', sys: 'system', call: 'call', missed: 'missed', reaction: 'reaction', summary: 'summary' };
@@ -86,25 +96,29 @@ export function entryFromId(id) {
   return entry;
 }
 
-export async function clearWhere(pred) {
-  const notifs = await getRegistry();
-  const shown = Object.keys(await chrome.notifications.getAll());
-  const candidates = { ...Object.fromEntries(shown.map((id) => [id, entryFromId(id)])), ...notifs };
-  const ids = Object.keys(candidates).filter((id) => pred(candidates[id], id));
-  await Promise.all(ids.map((id) => chrome.notifications.clear(id)));
-  for (const id of ids) delete notifs[id];
-  await setRegistry(notifs);
+export function clearWhere(pred) {
+  return withRegistry(async () => {
+    const notifs = await getRegistry();
+    const shown = Object.keys(await chrome.notifications.getAll());
+    const candidates = { ...Object.fromEntries(shown.map((id) => [id, entryFromId(id)])), ...notifs };
+    const ids = Object.keys(candidates).filter((id) => pred(candidates[id], id));
+    await Promise.all(ids.map((id) => chrome.notifications.clear(id)));
+    for (const id of ids) delete notifs[id];
+    await setRegistry(notifs);
+  });
 }
 
 // Drops registry entries for notifications that are no longer displayed
 // (onClosed is not reported reliably by every platform notification server).
-export async function prune() {
-  const shown = await chrome.notifications.getAll();
-  const notifs = await getRegistry();
-  const stale = Object.keys(notifs).filter((id) => !shown[id]);
-  if (!stale.length) return;
-  for (const id of stale) delete notifs[id];
-  await setRegistry(notifs);
+export function prune() {
+  return withRegistry(async () => {
+    const shown = await chrome.notifications.getAll();
+    const notifs = await getRegistry();
+    const stale = Object.keys(notifs).filter((id) => !shown[id]);
+    if (!stale.length) return;
+    for (const id of stale) delete notifs[id];
+    await setRegistry(notifs);
+  });
 }
 
 export async function clearAll() {

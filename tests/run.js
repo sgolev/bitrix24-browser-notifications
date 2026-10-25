@@ -11,6 +11,7 @@ import { displayState, summarize } from '../lib/status.js';
 import { notifId, parseNotifId, entryFromId } from '../lib/notifier.js';
 import { toFirefoxOptions } from '../lib/platform.js';
 import { affectsUi, stateKey } from '../lib/state.js';
+import { createSerializer } from '../lib/serial.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -218,6 +219,26 @@ test('affectsUi: popup/options refresh only on settings or portal-state changes'
   eq(affectsUi({ [stateKey('https://a.bitrix24.ru')]: {} }, 'session'), true);
   eq(affectsUi({ notifs: {}, 'sessid:https://a.bitrix24.ru': {} }, 'session'), false);
   eq(affectsUi({ 'cursor:https://a.bitrix24.ru': {} }, 'local'), false);
+});
+
+test('createSerializer: in order per key, parallel across keys, errors do not stop the queue', async () => {
+  const serialize = createSerializer();
+  const log = [];
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let releaseSlow;
+  const slow = serialize('slow', () => new Promise((r) => (releaseSlow = r)).then(() => log.push('slow done')));
+  const a1 = serialize('a', async () => { await wait(20); log.push('a1'); return 1; });
+  const a2 = serialize('a', async () => { log.push('a2'); throw new Error('boom'); });
+  const a3 = serialize('a', async () => { log.push('a3'); return 3; });
+  eq(await a1, 1);
+  let error = '';
+  try { await a2; } catch (e) { error = e.message; }
+  eq(error, 'boom', 'the caller sees the error');
+  eq(await a3, 3, 'the queue goes on after an error');
+  eq(log, ['a1', 'a2', 'a3'], 'key "a" ran in order and was not blocked by the stuck key');
+  releaseSlow();
+  await slow;
+  eq(log.at(-1), 'slow done');
 });
 
 test('displayState and badge summary across portals', () => {

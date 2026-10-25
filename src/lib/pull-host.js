@@ -12,6 +12,7 @@
 // and their start/stop/info/poke calls resolve to the info map { [origin]: client.info() }.
 
 import { PullClient } from './pull.js';
+import { createSerializer } from './serial.js';
 
 const KEEPALIVE_MS = 20 * 1000;
 
@@ -88,10 +89,14 @@ export function createLocalHost({ keepAlive = false } = {}) {
   };
 }
 
-// Proxy to a local host running in offscreen/offscreen.html.
+// Proxy to a local host running in offscreen/offscreen.html. Calls are serialized:
+// portals work in parallel, and one portal's stop() must not close the document
+// while another portal's start() is on its way.
 function createOffscreenHost() {
   let handler = () => {};
   let creating = null;
+  const serialize = createSerializer();
+  const serial = (fn) => serialize('host', fn);
 
   const exists = async () => (await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length > 0;
 
@@ -124,18 +129,20 @@ function createOffscreenHost() {
     onMessage(fn) {
       handler = fn;
     },
-    start: (origin, config) => send('start', { origin, config }),
-    info: () => send('info'),
-    poke: () => send('poke'),
+    start: (origin, config) => serial(() => send('start', { origin, config })),
+    info: () => serial(() => send('info')),
+    poke: () => serial(() => send('poke')),
     // Closes the portal's socket; closes the document once no socket is left.
-    async stop(origin) {
-      if (!(await exists())) return {};
-      const info = await chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'stop', origin }).catch(() => null);
-      if (!info || !Object.keys(info).length) await chrome.offscreen.closeDocument().catch(() => {});
-      return info || {};
-    },
-    async closeAll() {
-      if (await exists()) await chrome.offscreen.closeDocument().catch(() => {});
-    },
+    stop: (origin) =>
+      serial(async () => {
+        if (!(await exists())) return {};
+        const info = await chrome.runtime.sendMessage({ target: 'offscreen', cmd: 'stop', origin }).catch(() => null);
+        if (!info || !Object.keys(info).length) await chrome.offscreen.closeDocument().catch(() => {});
+        return info || {};
+      }),
+    closeAll: () =>
+      serial(async () => {
+        if (await exists()) await chrome.offscreen.closeDocument().catch(() => {});
+      }),
   };
 }
