@@ -95,9 +95,11 @@ async function stopPull(origin) {
 
 async function handleError(origin, e) {
   if (e instanceof AuthError) {
+    const prev = await getState(origin);
     await stopPull(origin);
     await chrome.storage.session.remove(sessidKey(origin));
     await setState(origin, { auth: 'login', pull: 'idle', total: 0, error: '', errorKind: '', me: null });
+    if (prev.auth !== 'login') await notifyLoggedOut(origin);
   } else {
     console.warn('[b24n]', origin, e);
     // A timeout gets its own status ("not responding"); the tick keeps retrying.
@@ -117,6 +119,7 @@ async function init(origin, reason) {
     const user = await callRest(origin, 'im.user.get');
     const me = { id: Number(user.id), name: user.name, avatar: user.avatar };
     await setState(origin, { auth: 'ok', error: '', errorKind: '', me });
+    await notifier.clear(notifId(origin, 'connection')); // logged in again
     await ensureBaseline(origin, me);
     const info = await pullHost.info();
     const pull = info?.[origin];
@@ -135,6 +138,21 @@ async function initAll(reason) {
   if (!portals.length) await pullHost.closeAll();
   await Promise.all(portals.map((origin) => enqueueFor(origin, () => init(origin, reason))));
   await renderBadge();
+}
+
+// Tells the user that a portal's session ended (logout or expiry), once per logout.
+// Portals that were never connected (no notify cursor yet) are left out: they
+// were not "lost", they still need a first login.
+async function notifyLoggedOut(origin) {
+  const s = await getSettings();
+  if (!s.notifyConnection || s.muteUntil > Date.now()) return;
+  const cursor = (await chrome.storage.local.get(cursorStoreKey(origin)))[cursorStoreKey(origin)];
+  if (!cursor?.initialized) return;
+  await notifier.show(notifId(origin, 'connection'), { kind: 'connection', origin }, {
+    title: t('loggedOutTitle'),
+    message: t('loggedOutBody', [host(origin)]),
+    silent: s.silent,
+  });
 }
 
 // Drops everything kept for a portal that was removed from the settings.

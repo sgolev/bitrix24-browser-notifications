@@ -193,5 +193,14 @@
   },
   "popupStateTimeout": {
     "message": "Не отвечает, повтор каждую минуту"
+  },
+  "optConnection": {
+    "message": "Выходе из портала (сессия завершена)"
+  },
+  "loggedOutTitle": {
+    "message": "Вы вышли из Битрикс24"
+  },
+  "loggedOutBody": {
+    "message": "Войдите на $1 снова, чтобы получать уведомления."
   }
 }

@@ -8,6 +8,7 @@ export const DEFAULTS = {
   notifyCalls: true,
   notifyMissedCalls: true,
   notifyReactions: true,
+  notifyConnection: true, // being logged out of a portal
   showText: true,
   suppressWhenFocused: true,
   silent: false,

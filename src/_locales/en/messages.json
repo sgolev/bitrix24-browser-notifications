@@ -193,5 +193,14 @@
   },
   "popupStateTimeout": {
     "message": "Not responding, retrying every minute"
+  },
+  "optConnection": {
+    "message": "Being logged out of a portal"
+  },
+  "loggedOutTitle": {
+    "message": "Logged out of Bitrix24"
+  },
+  "loggedOutBody": {
+    "message": "Log in to $1 again to keep receiving notifications."
   }
 }

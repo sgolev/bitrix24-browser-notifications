@@ -212,6 +212,7 @@ test('entryFromId rebuilds registry entries for orphaned notifications', () => {
   eq(entryFromId(`${o}|call:4`), { origin: o, kind: 'call', shownAt: 0, callId: 4 });
   eq(entryFromId(`${o}|summary`), { origin: o, kind: 'summary', shownAt: 0 });
   eq(entryFromId(`${o}|reaction:chat58:312`), { origin: o, kind: 'reaction', shownAt: 0, dialogId: 'chat58', messageId: 312 });
+  eq(entryFromId(`${o}|connection`), { origin: o, kind: 'connection', shownAt: 0 });
 });
 
 test('affectsUi: popup/options refresh only on settings or portal-state changes', () => {

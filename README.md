@@ -16,6 +16,7 @@ Native desktop notifications for Bitrix24 that work even when no portal tab is o
 - **Reactions to your chat messages:** "<name>: Reacted 👍 to your message". It disappears when you read that chat.
 - **Incoming calls:** Bitrix24 audio and video calls, private and group. Group calls show who is calling and in which chat. On Chromium the notification stays on screen while the call rings. It is replaced by a **missed call** notification if nobody answers, and removed if you answer or decline elsewhere.
 - Notifications disappear when you read the message or answer the call somewhere else (portal tab, mobile app, desktop app).
+- **Logged out of a portal:** if a portal's session ends (you logged out, or it expired, also while the browser was closed), one notification says so. Clicking it opens the portal's login page, and it disappears once you're logged in again. It can be turned off in Settings ("Being logged out of a portal"). Portals that are only slow or unreachable don't notify; they show "Not responding" or "Cannot reach the portal" in the popup.
 - The toolbar badge shows the unread count. `!` means you need to log in, `?` means the extension is not set up yet.
 - Clicking a chat notification opens that chat. If a portal tab is already open, it is reused without a reload.
 - **Several portals at once.** Each portal has its own connection and login state. When more than one portal is configured, every notification names its portal. The badge adds up unread counts across portals.

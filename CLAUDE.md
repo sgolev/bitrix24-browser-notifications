@@ -1,6 +1,6 @@
 # Bitrix24 Notifications — notes for Claude
 
-Browser extension (Chromium + Firefox, MV3) that shows desktop notifications for Bitrix24 chat messages (muted chats only for mentions), reactions to the user's chat messages, audio/video calls (incoming and missed) and bell notifications (tasks, feed, calendar, …), for several portals at once. Task comments and telephony are not notified. The README's feature list is the verified reference. It uses the user's browser login (cookies + `sessid`), not OAuth or webhooks. Plain JS ES modules, no npm and no dependencies.
+Browser extension (Chromium + Firefox, MV3) that shows desktop notifications for Bitrix24 chat messages (muted chats only for mentions), reactions to the user's chat messages, audio/video calls (incoming and missed), bell notifications (tasks, feed, calendar, …) and being logged out of a portal, for several portals at once. Task comments and telephony are not notified. The README's feature list is the verified reference. It uses the user's browser login (cookies + `sessid`), not OAuth or webhooks. Plain JS ES modules, no npm and no dependencies.
 
 ## Layout and build
 - `src/` is shared code and becomes the root of each built extension. `platforms/<browser>/manifest.json` holds the per-browser manifests. `tests/` is copied into dev builds only.

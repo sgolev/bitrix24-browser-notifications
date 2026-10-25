@@ -76,7 +76,7 @@ export function forget(id) {
   });
 }
 
-const KINDS = { chat: 'chat', sys: 'system', call: 'call', missed: 'missed', reaction: 'reaction', summary: 'summary' };
+const KINDS = { chat: 'chat', sys: 'system', call: 'call', missed: 'missed', reaction: 'reaction', summary: 'summary', connection: 'connection' };
 
 // Registry entry rebuilt from the id alone, for notifications still on screen that
 // the registry no longer knows about (it is wiped when the extension is reloaded).
