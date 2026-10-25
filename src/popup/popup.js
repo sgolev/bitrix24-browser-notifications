@@ -1,6 +1,7 @@
 import { localize, t, STATE_UI } from '../ui/i18n.js';
-import { setSettings } from '../lib/settings.js';
+import { getSettings, setSettings } from '../lib/settings.js';
 import { displayState } from '../lib/status.js';
+import { getAllStates, affectsUi } from '../lib/state.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -42,18 +43,27 @@ function render({ settings, portals }) {
   }
 }
 
+// State comes straight from storage, never through the background: its work queue
+// may be busy with a portal that is slow to respond, and the popup must not wait.
+async function update() {
+  const settings = await getSettings();
+  render({ settings, portals: await getAllStates(settings.portals) });
+}
+
 localize();
-render(await ask('get-state'));
-// Re-check the sessions in the background (e.g. the user has just logged in).
-ask('refresh').then(render);
 
 $('setup').onclick = () => chrome.runtime.openOptionsPage();
 $('settings').onclick = (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
 };
-$('mute').onclick = async () => {
-  const muteUntil = $('mute').dataset.muted ? 0 : Date.now() + 60 * 60 * 1000;
-  await setSettings({ muteUntil });
-  render(await ask('get-state'));
-};
+$('mute').onclick = () => setSettings({ muteUntil: $('mute').dataset.muted ? 0 : Date.now() + 60 * 60 * 1000 });
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (affectsUi(changes, area)) update();
+});
+await update();
+
+// Re-check portals that aren't connected (e.g. the user has just logged in).
+// Results arrive through the storage listener above.
+ask('refresh').catch(() => {});

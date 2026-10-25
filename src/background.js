@@ -11,6 +11,7 @@ import { callRest, sessidKey, AuthError } from './lib/portal.js';
 import { interpret } from './lib/events.js';
 import { recentToActions, notificationsToActions, totalUnread } from './lib/poller.js';
 import { DEFAULT_STATE, summarize } from './lib/status.js';
+import { stateKey, getState, getAllStates } from './lib/state.js';
 import * as notifier from './lib/notifier.js';
 import { createPullHost } from './lib/pull-host.js';
 
@@ -29,14 +30,7 @@ let queue = Promise.resolve();
 const enqueue = (fn) => (queue = queue.then(fn).catch((e) => console.error('[b24n]', e)));
 
 // ------------------------------------------------------- per-portal session state
-// storage.session "portal:<origin>" = { auth, pull, total, error, me, lastPollAt }
-
-const stateKey = (origin) => `portal:${origin}`;
-
-async function getState(origin) {
-  const key = stateKey(origin);
-  return { ...DEFAULT_STATE, ...(await chrome.storage.session.get(key))[key] };
-}
+// storage.session "portal:<origin>" (see lib/state.js). Only the background writes it.
 
 async function setState(origin, patch) {
   const next = { ...(await getState(origin)), ...patch };
@@ -45,10 +39,6 @@ async function setState(origin, patch) {
   return next;
 }
 
-async function getAllStates(portals) {
-  const stored = await chrome.storage.session.get(portals.map(stateKey));
-  return portals.map((origin) => ({ origin, ...DEFAULT_STATE, ...stored[stateKey(origin)] }));
-}
 
 async function renderBadge() {
   const s = await getSettings();
@@ -586,21 +576,34 @@ async function stateForUi() {
   return { settings, portals: await getAllStates(settings.portals) };
 }
 
+// Re-checks portals that are not connected (e.g. the user has just logged in).
+// Connected portals are left alone: their pull connection and the 1-minute tick
+// keep them current. Each portal is checked at most once at a time.
+const refreshing = new Set();
+async function refreshStale(origin) {
+  const { portals } = await getSettings();
+  for (const st of await getAllStates(origin ? [origin] : portals)) {
+    if (st.auth === 'ok' || refreshing.has(st.origin)) continue;
+    refreshing.add(st.origin);
+    enqueue(() => init(st.origin, 'refresh')).finally(() => refreshing.delete(st.origin));
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.target !== 'background') return;
   switch (msg.cmd) {
+    // UI requests are answered at once, never behind the work queue: it can be busy
+    // for a long time with a portal that is slow to respond.
     case 'get-state':
-      enqueue(async () => reply(await stateForUi()));
+      stateForUi().then(reply);
       return true;
     case 'refresh':
-      enqueue(async () => {
-        if (msg.origin) await init(msg.origin, 'refresh');
-        else await initAll('refresh');
-        reply(await stateForUi());
-      });
+      // Results reach the UI through storage changes; nothing to wait for.
+      refreshStale(msg.origin).finally(() => reply({ ok: true }));
       return true;
     case 'open-portal':
-      enqueue(() => openTarget({ kind: 'portal', origin: msg.origin }));
+      // Only reads settings and tabs, so it needs no queue.
+      openTarget({ kind: 'portal', origin: msg.origin }).catch((e) => console.error('[b24n]', e));
       return;
     case 'test-notification':
       enqueue(async () => {

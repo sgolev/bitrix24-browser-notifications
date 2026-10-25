@@ -1,6 +1,7 @@
 import { localize, t, STATE_UI } from '../ui/i18n.js';
 import { getSettings, setSettings, addPortal, originPattern } from '../lib/settings.js';
 import { displayState } from '../lib/status.js';
+import { getAllStates, affectsUi } from '../lib/state.js';
 
 const $ = (id) => document.getElementById(id);
 const ask = (cmd, extra = {}) => chrome.runtime.sendMessage({ target: 'background', cmd, ...extra });
@@ -28,8 +29,9 @@ function renderPortal(p) {
 
 let shown = []; // origins currently listed
 
+// Reads state straight from storage, like the popup, so a slow portal can't stall the page.
 async function render() {
-  const { portals } = await ask('get-state');
+  const portals = await getAllStates((await getSettings()).portals);
   shown = portals.map((p) => p.origin);
   $('portals').replaceChildren(...portals.map(renderPortal));
   $('welcome').hidden = portals.length > 0;
@@ -62,7 +64,7 @@ $('portal-form').onsubmit = (e) => {
 
 $('test').onclick = () => ask('test-notification');
 
-chrome.storage.onChanged.addListener((_changes, area) => {
-  if (area === 'session' || area === 'sync') render();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (affectsUi(changes, area)) render();
 });
 render();

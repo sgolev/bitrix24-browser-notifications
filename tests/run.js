@@ -10,6 +10,7 @@ import { normalizePortalUrl, migrate, addPortal, portalForUrl } from '../lib/set
 import { displayState, summarize } from '../lib/status.js';
 import { notifId, parseNotifId, entryFromId } from '../lib/notifier.js';
 import { toFirefoxOptions } from '../lib/platform.js';
+import { affectsUi, stateKey } from '../lib/state.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -210,6 +211,13 @@ test('entryFromId rebuilds registry entries for orphaned notifications', () => {
   eq(entryFromId(`${o}|call:4`), { origin: o, kind: 'call', shownAt: 0, callId: 4 });
   eq(entryFromId(`${o}|summary`), { origin: o, kind: 'summary', shownAt: 0 });
   eq(entryFromId(`${o}|reaction:chat58:312`), { origin: o, kind: 'reaction', shownAt: 0, dialogId: 'chat58', messageId: 312 });
+});
+
+test('affectsUi: popup/options refresh only on settings or portal-state changes', () => {
+  eq(affectsUi({ portals: {} }, 'sync'), true);
+  eq(affectsUi({ [stateKey('https://a.bitrix24.ru')]: {} }, 'session'), true);
+  eq(affectsUi({ notifs: {}, 'sessid:https://a.bitrix24.ru': {} }, 'session'), false);
+  eq(affectsUi({ 'cursor:https://a.bitrix24.ru': {} }, 'local'), false);
 });
 
 test('displayState and badge summary across portals', () => {
