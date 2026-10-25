@@ -187,5 +187,11 @@
   },
   "optReactions": {
     "message": "Reactions to my messages in chats"
+  },
+  "statusTimeout": {
+    "message": "not responding"
+  },
+  "popupStateTimeout": {
+    "message": "Not responding, retrying every minute"
   }
 }

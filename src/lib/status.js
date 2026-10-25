@@ -1,14 +1,16 @@
 // Per-portal connection state → display state, and aggregation of all portals
 // into the toolbar badge. Pure, so it can be unit-tested.
 
-export const DEFAULT_STATE = { auth: 'unknown', pull: 'idle', total: 0, error: '', me: null, lastPollAt: 0 };
+// errorKind (with auth "error"): "timeout" = the portal doesn't respond, "error" = anything else.
+export const DEFAULT_STATE = { auth: 'unknown', pull: 'idle', total: 0, error: '', errorKind: '', me: null, lastPollAt: 0 };
 
 const COLORS = { ok: '#d6303c', degraded: '#8a8f99', attention: '#e89b0c', off: '#8a8f99' };
 
-// One of: online | polling | login | permission | error | connecting
+// One of: online | polling | login | permission | timeout | error | connecting
 export function displayState(state) {
   if (state.auth === 'ok') return state.pull === 'online' ? 'online' : 'polling';
   if (state.auth === 'unknown') return 'connecting';
+  if (state.auth === 'error' && state.errorKind === 'timeout') return 'timeout';
   return state.auth;
 }
 
@@ -35,7 +37,7 @@ export function summarize(entries, { t = (k, s) => (s ? `${k} ${s.join(' ')}` : 
     let degraded = false;
     for (const e of entries) {
       const d = displayState(e);
-      if (d === 'login' || d === 'permission' || d === 'error') attention = true;
+      if (d === 'login' || d === 'permission' || d === 'error' || d === 'timeout') attention = true;
       if (d !== 'online') degraded = true;
       total += e.auth === 'ok' ? e.total || 0 : 0;
       const status = {
@@ -44,6 +46,7 @@ export function summarize(entries, { t = (k, s) => (s ? `${k} ${s.join(' ')}` : 
         connecting: 'statusPolling',
         login: 'statusLogin',
         permission: 'statusUnconfigured',
+        timeout: 'statusTimeout',
         error: 'statusError',
       }[d];
       let line = `${host(e.origin)} — ${t(status)}`;

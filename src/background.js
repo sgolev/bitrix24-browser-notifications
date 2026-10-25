@@ -7,7 +7,7 @@
 // Chromium, the background page itself on Firefox.
 
 import { getSettings, originPattern, portalForUrl } from './lib/settings.js';
-import { callRest, sessidKey, AuthError } from './lib/portal.js';
+import { callRest, sessidKey, AuthError, INTERACTIVE_TIMEOUT_MS } from './lib/portal.js';
 import { interpret } from './lib/events.js';
 import { recentToActions, notificationsToActions, totalUnread } from './lib/poller.js';
 import { DEFAULT_STATE, summarize } from './lib/status.js';
@@ -97,10 +97,12 @@ async function handleError(origin, e) {
   if (e instanceof AuthError) {
     await stopPull(origin);
     await chrome.storage.session.remove(sessidKey(origin));
-    await setState(origin, { auth: 'login', pull: 'idle', total: 0, error: '', me: null });
+    await setState(origin, { auth: 'login', pull: 'idle', total: 0, error: '', errorKind: '', me: null });
   } else {
     console.warn('[b24n]', origin, e);
-    await setState(origin, { auth: 'error', error: String(e.message || e) });
+    // A timeout gets its own status ("not responding"); the tick keeps retrying.
+    const timeout = e.code === 'TIMEOUT';
+    await setState(origin, { auth: 'error', errorKind: timeout ? 'timeout' : 'error', error: timeout ? '' : String(e.message || e) });
   }
 }
 
@@ -114,7 +116,7 @@ async function init(origin, reason) {
   try {
     const user = await callRest(origin, 'im.user.get');
     const me = { id: Number(user.id), name: user.name, avatar: user.avatar };
-    await setState(origin, { auth: 'ok', error: '', me });
+    await setState(origin, { auth: 'ok', error: '', errorKind: '', me });
     await ensureBaseline(origin, me);
     const info = await pullHost.info();
     const pull = info?.[origin];
@@ -515,8 +517,10 @@ async function onButtonClicked(id, index) {
   if (!entry?.origin || index !== 0) return;
   const { origin } = entry;
   try {
-    if (entry.kind === 'chat') await callRest(origin, 'im.dialog.read', { DIALOG_ID: entry.dialogId });
-    else if (entry.kind === 'system') await callRest(origin, 'im.notify.read', { ID: entry.notifyId, ONLY_CURRENT: 'Y' });
+    // The user is waiting for these, so they get the longer timeout.
+    const opts = { timeoutMs: INTERACTIVE_TIMEOUT_MS };
+    if (entry.kind === 'chat') await callRest(origin, 'im.dialog.read', { DIALOG_ID: entry.dialogId }, opts);
+    else if (entry.kind === 'system') await callRest(origin, 'im.notify.read', { ID: entry.notifyId, ONLY_CURRENT: 'Y' }, opts);
     else await openTarget(entry);
   } catch (e) {
     await handleError(origin, e);

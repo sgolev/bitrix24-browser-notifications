@@ -187,5 +187,11 @@
   },
   "optReactions": {
     "message": "Реакциях на мои сообщения в чатах"
+  },
+  "statusTimeout": {
+    "message": "не отвечает"
+  },
+  "popupStateTimeout": {
+    "message": "Не отвечает, повтор каждую минуту"
   }
 }

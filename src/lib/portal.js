@@ -17,26 +17,42 @@ export class RestError extends Error {
   }
 }
 
-const TIMEOUT_MS = 20000;
+// Background requests give up sooner, so a portal that doesn't respond is reported
+// ("not responding") and retried by the next tick instead of holding its queue.
+// Requests the user is waiting for (e.g. "Mark as read") get longer.
+export const BACKGROUND_TIMEOUT_MS = 10000;
+export const INTERACTIVE_TIMEOUT_MS = 20000;
+
+const isTimeout = (e) => e?.name === 'TimeoutError' || e?.name === 'AbortError';
 
 // Each portal has its own sessid, kept in storage.session under "sessid:<origin>".
 export const sessidKey = (origin) => `sessid:${origin}`;
 
-export async function callRest(origin, method, params = {}) {
+// Throws AuthError (not logged in) or RestError; RestError code "TIMEOUT" means the
+// portal did not answer in time, "NETWORK" that it could not be reached at all.
+export async function callRest(origin, method, params = {}, { timeoutMs = BACKGROUND_TIMEOUT_MS } = {}) {
   const key = sessidKey(origin);
   let sessid = (await chrome.storage.session.get(key))[key] || '';
+  const timeout = () => new RestError('TIMEOUT', `no response within ${timeoutMs / 1000} s`);
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(`${origin}/rest/${method}.json?sessid=${encodeURIComponent(sessid || '-')}`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
+    const signal = AbortSignal.timeout(timeoutMs);
+    let res;
+    try {
+      res = await fetch(`${origin}/rest/${method}.json?sessid=${encodeURIComponent(sessid || '-')}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+        signal,
+      });
+    } catch (e) {
+      throw isTimeout(e) ? timeout() : new RestError('NETWORK', String(e.message || e));
+    }
     let data;
     try {
       data = await res.json();
-    } catch {
+    } catch (e) {
+      if (isTimeout(e)) throw timeout();
       // HTML instead of JSON: redirected to a login page.
       if (res.redirected || res.status === 401 || res.status === 403) throw new AuthError();
       throw new RestError('BAD_RESPONSE', `HTTP ${res.status}`, res.status);

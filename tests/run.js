@@ -241,6 +241,22 @@ test('createSerializer: in order per key, parallel across keys, errors do not st
   eq(log.at(-1), 'slow done');
 });
 
+test('timeouts show as "not responding", other errors as errors', () => {
+  eq(displayState({ auth: 'error', errorKind: 'timeout' }), 'timeout');
+  eq(displayState({ auth: 'error', errorKind: 'error' }), 'error');
+  eq(displayState({ auth: 'error' }), 'error', 'states saved before errorKind existed');
+  const t = (k, s) => (s ? `${k}(${s.join()})` : k);
+  const sum = summarize(
+    [
+      { origin: 'https://a.x', auth: 'ok', pull: 'online', total: 2 },
+      { origin: 'https://slow.x', auth: 'error', errorKind: 'timeout', total: 0 },
+    ],
+    { t },
+  );
+  eq([sum.text, sum.color], ['!', '#e89b0c']);
+  eq(sum.title.split('\n'), ['extName', 'a.x — statusOnline · unreadCount(2)', 'slow.x — statusTimeout']);
+});
+
 test('displayState and badge summary across portals', () => {
   const st = (origin, total, pull = 'online') => ({ origin, auth: 'ok', pull, total });
   eq(displayState({ auth: 'ok', pull: 'online' }), 'online');

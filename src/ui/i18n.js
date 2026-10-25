@@ -15,5 +15,6 @@ export const STATE_UI = {
   connecting: ['off', 'popupStateConnecting'],
   login: ['warn', 'popupStateLogin'],
   permission: ['warn', 'popupStatePermission'],
+  timeout: ['warn', 'popupStateTimeout'],
   error: ['warn', 'popupStateError'],
 };
