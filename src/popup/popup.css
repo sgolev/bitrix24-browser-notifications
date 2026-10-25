@@ -3,6 +3,8 @@ header { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
 .title { font-weight: 600; }
 .small { font-size: 12px; }
 #portals { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+#portals:empty { display: none; }
+#empty { margin: 0 0 12px; }
 .portal { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; }
 .line { display: flex; gap: 8px; align-items: center; }
 .host { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
