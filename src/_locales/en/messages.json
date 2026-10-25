@@ -3,7 +3,7 @@
     "message": "Bitrix24 Notifications"
   },
   "extDescription": {
-    "message": "Desktop notifications for Bitrix24 messages, notifications and calls, even when no portal tab is open."
+    "message": "Desktop notifications for Bitrix24 messages, calls, and tasks, even when no portal tab is open."
   },
   "statusUnconfigured": {
     "message": "not set up"
@@ -108,7 +108,7 @@
     "message": "Bitrix24 Notifications — Settings"
   },
   "optPortalHint": {
-    "message": "Address of a Bitrix24, e.g. https://yourcompany.bitrix24.ru. Log in there in this browser as usual; the extension uses that login."
+    "message": "Address of a Bitrix24, e.g. https://yourcompany.bitrix24.com. Log in there in this browser as usual; the extension uses that login."
   },
   "optSaved": {
     "message": "Saved."
@@ -129,7 +129,7 @@
     "message": "Group chat messages"
   },
   "optSystem": {
-    "message": "Notifications (tasks, mentions, comments, …)"
+    "message": "Other notifications (tasks, mentions, comments, …)"
   },
   "optCalls": {
     "message": "Incoming calls"
@@ -178,5 +178,8 @@
   },
   "popupOpenShort": {
     "message": "Open"
+  },
+  "optPortalPlaceholder": {
+    "message": "https://yourcompany.bitrix24.com"
   }
 }

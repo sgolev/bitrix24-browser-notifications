@@ -1,6 +1,6 @@
 # Bitrix24 Notifications — notes for Claude
 
-Browser extension (Chromium + Firefox, MV3) that shows desktop notifications for Bitrix24 chats, bell notifications and calls, for several portals at once. It uses the user's browser login (cookies + `sessid`), not OAuth or webhooks. Plain JS ES modules, no npm and no dependencies.
+Browser extension (Chromium + Firefox, MV3) that shows desktop notifications for Bitrix24 chats, calls and bell notifications, for several portals at once. It uses the user's browser login (cookies + `sessid`), not OAuth or webhooks. Plain JS ES modules, no npm and no dependencies.
 
 ## Layout and build
 - `src/` is shared code and becomes the root of each built extension. `platforms/<browser>/manifest.json` holds the per-browser manifests. `tests/` is copied into dev builds only.
