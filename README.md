@@ -120,7 +120,6 @@ The extension has no access to any other site. Removing a portal also gives up a
 ## Limitations
 
 - It relies on the portal's internal web APIs and the Push&Pull protocol, as observed on Bitrix24 cloud in October 2026. These are not public, documented APIs, and Bitrix24 updates could change them. `docs/protocol.md` lists exactly what is used.
-- It has only been tested with Bitrix24 cloud. Self-hosted ("box") installations may use a different pull server version.
 - Calls cannot be answered from the notification. **Answer** (Chromium) or a click opens the chat, and you answer in the portal.
 - Bitrix24 telephony (phone lines) is not covered, only Bitrix24's own audio and video calls.
 - After the real-time connection was down, the catch-up recovers chat messages and bell notifications (last 12 h), but not calls or reactions from that gap.
